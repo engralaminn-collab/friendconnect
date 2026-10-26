@@ -129,7 +129,7 @@ export function FriendsView() {
         <h1 className="mb-3 text-xl font-bold">Friends</h1>
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name or username" className="rounded-xl pl-9" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Exact email or username (e.g. you@friend.com)" className="rounded-xl pl-9" />
         </div>
       </div>
 
@@ -144,7 +144,11 @@ export function FriendsView() {
 
         <TabsContent value="search" className="fc-scroll m-0 flex-1 overflow-y-auto p-4">
           {results.length === 0 ? (
-            <EmptyState icon={<Search size={36} />} title="No users found" description="Try searching by name or username." />
+            <EmptyState
+              icon={<Search size={36} />}
+              title="Nobody to show"
+              description="FriendConnect has no member directory. Enter someone's exact email address or @username to send them a connection request — until they accept, you both stay invisible to each other."
+            />
           ) : (
             <div className="space-y-1">
               {results.map((u) => {
@@ -267,7 +271,11 @@ export function FriendsView() {
               ))}
             </div>
           ) : suggestions.length === 0 ? (
-            <EmptyState icon={<Users size={36} />} title="No suggestions yet" description="Connect with more friends to get better suggestions." />
+            <EmptyState
+              icon={<Users size={36} />}
+              title="No suggestions yet"
+              description="People only appear here after they send you a connection request. Nothing is suggested from the wider network — that keeps everyone private."
+            />
           ) : (
             <div className="space-y-1">
               {suggestions.map((s) => (
@@ -367,7 +375,7 @@ function SuggestionRow({ suggestion, onAdd, loading }: { suggestion: Suggestion;
       </button>
       <Button size="sm" variant="secondary" className="shrink-0 rounded-full" disabled={loading} onClick={onAdd}>
         {loading ? <Loader2 size={14} className="mr-1 animate-spin" /> : <UserPlus size={14} className="mr-1" />}
-        Add friend
+        Connect
       </Button>
     </div>
   )

@@ -30,7 +30,7 @@ const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   APP_ENV: z.string().default("development"),
   APP_URL: z.string().url().default("http://localhost:3000"),
-  ALLOWED_ORIGINS: csv.default("http://localhost:3000"),
+  ALLOWED_ORIGINS: csv.default(() => ['http://localhost:3000']),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   SENTRY_DSN: z.string().optional().default(""),
 
@@ -58,10 +58,10 @@ const EnvSchema = z.object({
   S3_PRESIGN_TTL_SEC: z.coerce.number().int().positive().default(300),
 
   WEBSOCKET_PATH: z.string().default("/api/realtime"),
-  WEBSOCKET_CORS_ORIGINS: csv.default(""),
+  WEBSOCKET_CORS_ORIGINS: csv.default(() => []),
 
-  STUN_URLS: csv.default("stun:stun.l.google.com:19302"),
-  TURN_URLS: csv.default(""),
+  STUN_URLS: csv.default(() => ['stun:stun.l.google.com:19302']),
+  TURN_URLS: csv.default(() => []),
   TURN_USERNAME: z.string().default(""),
   TURN_CREDENTIAL: z.string().default(""),
   TURN_SHARED_SECRET: z.string().default(""),

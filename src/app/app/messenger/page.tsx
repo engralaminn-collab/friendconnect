@@ -36,6 +36,7 @@ import {
   Wand2,
   X,
 } from "lucide-react";
+import { EmojiPicker } from "@/components/common/EmojiPicker";
 import { PageHeader, StatCard } from "@/components/app/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { Avatar, Badge, EmptyState, Progress } from "@/components/ui/primitives";
@@ -75,7 +76,6 @@ function daysSince(iso: string) {
   return Math.round((Date.now() - +new Date(iso)) / 86400000);
 }
 
-const EMOJI = ["😀","😂","😍","👍","🙏","🔥","🎉","✅","💡","🚀","❤️","🤝"];
 
 const STATUS_TEXT: Record<Thread["channel"], string> = {
   whatsapp: "WhatsApp",
@@ -1086,19 +1086,13 @@ export default function MessengerPage() {
                         }}
                       />
                       {showEmoji && (
-                        <div className="absolute bottom-full left-0 z-20 mb-2 grid w-[248px] grid-cols-6 gap-1 rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface)] p-2 shadow-xl">
-                          {EMOJI.map((e) => (
-                            <button
-                              key={e}
-                              onClick={() => {
-                                setDraft(draft + e);
-                                setShowEmoji(false);
-                              }}
-                              className="grid size-8 place-items-center rounded-lg text-[18px] transition-transform hover:scale-125"
-                            >
-                              {e}
-                            </button>
-                          ))}
+                        <div className="absolute bottom-full left-0 z-20 mb-2 w-[300px] rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface)] p-2 shadow-xl">
+                          <EmojiPicker
+                            onPick={(emoji) => {
+                              setDraft((d) => d + emoji);
+                              setShowEmoji(false);
+                            }}
+                          />
                         </div>
                       )}
                     </div>

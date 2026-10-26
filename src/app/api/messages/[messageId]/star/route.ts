@@ -4,11 +4,11 @@ import { getSessionUser } from '@/lib/session'
 import { errorJson, json } from '@/lib/serialize'
 
 // POST star a message
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(_req: NextRequest, { params }: { params: Promise<{ messageId: string }> }) {
   try {
     const me = await getSessionUser()
     if (!me) return errorJson('Unauthorized', 401)
-    const { id } = await params
+    const { messageId: id } = await params
     const msg = await db.message.findUnique({ where: { id } })
     if (!msg) return errorJson('Message not found', 404)
     // must be participant
@@ -26,11 +26,11 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 }
 
 // DELETE unstar a message
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ messageId: string }> }) {
   try {
     const me = await getSessionUser()
     if (!me) return errorJson('Unauthorized', 401)
-    const { id } = await params
+    const { messageId: id } = await params
     await db.messageStar.deleteMany({ where: { messageId: id, userId: me.id } })
     return json({ ok: true, starred: false })
   } catch (e: any) {

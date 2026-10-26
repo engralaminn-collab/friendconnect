@@ -1,55 +1,65 @@
-# FriendConnect — CI/CD Pipeline
-# Required GitHub Secrets for deployment:
-#   DEPLOY_HOST     — production server IP
-#   DEPLOY_USER     — deployment user (aloedu)
-#   DEPLOY_SSH_KEY  — SSH private key for the deployment user
-#   DEPLOY_PATH     — app path on server (e.g. /home/aloedu/friendconnect)
+# FriendConnect — continuous integration
+#
+# Single source of truth for verification: install, typecheck the app, typecheck
+# the test suite, run the test suite, and build the Next.js app. The custom
+# Socket.IO server is built as a smoke check so a broken server bundle cannot
+# reach main.
+#
+# Integration tests never fake a pass: HTTP/Socket.IO suites skip honestly when
+# no server is reachable (FC_BASE_URL unset), unit suites always run.
 
-name: FriendConnect CI/CD
+name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: ["main"]
   pull_request:
-    branches: [main, master]
+    branches: ["main"]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  # ---- Lint + Typecheck + Build ----
-  quality:
+  verify:
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20.x, 22.x]
+
+    env:
+      # Prisma schema needs a URL even for `prisma generate`.
+      DATABASE_URL: file:./prisma/dev.db
+      NEXT_TELEMETRY_DISABLED: "1"
+
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - name: Lint
-        run: bun run lint
-      - name: Typecheck
-        run: bunx tsc --noEmit
-      - name: Build
-        run: bun run build
-      - name: Generate Prisma Client
-        run: bun run db:generate
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: build
-          path: .next/standalone
 
-  # ---- Deploy to production (only on main branch) ----
-  deploy:
-    needs: quality
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-    steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.0
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            cd ${{ secrets.DEPLOY_PATH }}
-            git pull origin main
-            ./scripts/deploy.sh
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Prepare Prisma client
+        run: npx prisma generate
+
+      - name: Type-check application
+        run: npx tsc --noEmit
+
+      - name: Type-check test suite
+        run: npm run test:types
+
+      - name: Build Socket.IO server bundle
+        run: npm run build:server
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build Next.js application
+        run: npm run build

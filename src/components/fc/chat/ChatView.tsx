@@ -31,6 +31,8 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { EmojiPicker as EmojiLibrary } from '@/components/common/EmojiPicker'
+import { QUICK_REACTIONS } from '@/lib/data/emojis'
 import {
   ArrowLeft,
   Phone,
@@ -203,17 +205,7 @@ interface MessageReminderLite {
   peerName: string
 }
 
-const EMOJIS = [
-  '😀', '😄', '😁', '😂', '🥹', '😊', '😍', '😘',
-  '😎', '🤔', '😴', '😭', '😡', '🥳', '😇', '🙃',
-  '👍', '👎', '🙏', '👏', '🙌', '🤝', '👋', '✌️',
-  '🤞', '💪', '❤️', '🧡', '💛', '💚', '💙', '💜',
-  '🔥', '✨', '🎉', '🎁', '💯', '⭐', '🌟', '☀️',
-  '🌙', '🌈', '☕', '🍕', '🍔', '🍟', '🍦', '🍓',
-  '🌸', '🌺', '🐶', '🐱', '🦄', '🐢', '🦋', '🐝',
-  '⚽', '🏀', '🎵', '🎮', '📱', '💻', '📚', '✅',
-  '❌', '❓', '❗', '🚀', '👀', '🫶', '🤗', '🫡',
-]
+// Emoji library lives in one place (categorised, includes the playful pack).
 
 // ---------------- helpers ----------------
 function formatBytes(bytes: number | null | undefined): string {
@@ -1599,7 +1591,7 @@ function ChatRoom({
       mode === 'direct'
         ? api<{ friends: Friend[] }>('/api/friends')
             .then((d) => d.friends.find((f) => f.id === peerId) || null)
-            .then((friend): PeerInfo | null => {
+            .then(async (friend): Promise<PeerInfo | null> => {
               if (friend) {
                 return {
                   name: friend.name,
@@ -1928,7 +1920,7 @@ function ChatRoom({
             reactions.splice(idx, 1)
             socket.emit(RT.REACTION_REMOVE, { messageId, emoji })
           } else {
-            reactions.push({ emoji, userId: meId, userName: me?.name || '' })
+            reactions.push({ emoji, userId: meId ?? '', userName: me?.name || '' })
             socket.emit(RT.REACTION_ADD, { messageId, emoji })
           }
           return { ...m, reactions }
@@ -3008,29 +3000,20 @@ function EmojiPicker({ onPick }: { onPick: (e: string) => void }) {
           <Smile size={20} />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" side="top" className="w-72 p-3">
-        <div className="grid grid-cols-8 gap-0.5">
-          {EMOJIS.map((e, i) => (
-            <button
-              key={`${e}-${i}`}
-              type="button"
-              onClick={() => {
-                onPick(e)
-                setOpen(false)
-              }}
-              className="grid h-8 w-8 place-items-center rounded-md text-lg transition hover:bg-accent"
-            >
-              {e}
-            </button>
-          ))}
-        </div>
+      <PopoverContent align="start" side="top" className="w-80 p-3">
+        <EmojiLibrary
+          onPick={(emoji) => {
+            onPick(emoji)
+            setOpen(false)
+          }}
+        />
       </PopoverContent>
     </Popover>
   )
 }
 
 // ---------------- message bubble ----------------
-const QUICK_REACTIONS = ['❤️', '😂', '👍', '😮', '😢', '🙏']
+
 
 function highlight(text: string, q: string): React.ReactNode[] {
   if (!q.trim()) return linkify(text)
@@ -3813,6 +3796,9 @@ function ChatSettingsSheet({
   onOpenStarred,
   onOpenScheduled,
   onOpenReminders,
+  mode,
+  peerId,
+  peerName,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void

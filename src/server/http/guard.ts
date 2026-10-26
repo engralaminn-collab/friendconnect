@@ -40,9 +40,9 @@ export function assertSameOrigin(req: NextRequest): void {
   }
 }
 
-export async function parseJson<Out, In = unknown>(
+export async function parseJson<Out>(
   req: NextRequest,
-  schema: z.ZodType<Out, z.ZodTypeDef, In>,
+  schema: z.ZodType<Out>,
 ): Promise<Out> {
   let raw: unknown;
   try {
@@ -55,9 +55,9 @@ export async function parseJson<Out, In = unknown>(
   return result.data;
 }
 
-export function parseQuery<Out, In = unknown>(
+export function parseQuery<Out>(
   req: NextRequest,
-  schema: z.ZodType<Out, z.ZodTypeDef, In>,
+  schema: z.ZodType<Out>,
 ): Out {
   const obj: Record<string, string> = {};
   req.nextUrl.searchParams.forEach((value, key) => {
