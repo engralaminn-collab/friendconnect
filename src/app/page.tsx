@@ -117,8 +117,8 @@ export default function HomePage() {
               <ProductMock />
               <div className="mt-4 grid grid-cols-3 gap-3 text-center">
                 {[
-                  { k: "37", v: "modules" },
-                  { k: "180+", v: "features" },
+                  { k: "42", v: "modules" },
+                  { k: "260+", v: "features" },
                   { k: "0", v: "setup calls" },
                 ].map((s) => (
                   <div
@@ -209,7 +209,7 @@ export default function HomePage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <Reveal className="mx-auto max-w-2xl text-center">
             <span className="chip border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-800 dark:bg-brand-950/60 dark:text-brand-300">
-              Eight pillars
+              Nine pillars
             </span>
             <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
               A platform, not a pile of tools
@@ -672,7 +672,7 @@ export default function HomePage() {
                 period: "forever",
                 desc: "One person, all modules, local-first storage.",
                 features: [
-                  "All 34 modules",
+                  "All 42 modules",
                   "Local-first storage",
                   "3 agent runs / day",
                   "Community feed",

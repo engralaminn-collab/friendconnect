@@ -21,7 +21,7 @@ npm run dev      # http://localhost:3000
 
 ```bash
 npm run typecheck   # tsc --noEmit
-npm run build       # next build → 53 static pages
+npm run build       # next build → 60 static pages
 npm start           # production server on 0.0.0.0:3000
 ```
 
@@ -29,14 +29,15 @@ npm start           # production server on 0.0.0.0:3000
 
 ## What is in it
 
-**37 workspace modules across 8 pillars**, plus a 9-page public marketing site.
+**42 workspace modules across 9 pillars**, plus a 9-page public marketing site.
 
 ### Messaging & Calls
 | Module | What it does |
 | --- | --- |
-| `/app/messenger` | WhatsApp-style client: thread list with pin/mute/archive/search, reply quotes, reactions, starred messages, polls with live tallies, voice-note recorder with level meter, emoji picker, attachment menu (image · video · document · audio · location · contact · poll), media lightbox, per-thread search, read receipts, typing indicator, and an AI marketing CRM panel with lead score and next best action |
-| `/app/calls` | Twelve-key dialpad, call history with direction/duration/outcome, MOS and latency trend charts, microphone/camera/speaker profiles with a saved default, and a packet-diagnostics modal (RTT, jitter, loss, MOS) |
+| `/app/messenger` | WhatsApp-style client: thread list with pin/mute/archive/search, reply quotes, reactions, starred messages, polls with live tallies, voice-note recorder with level meter, emoji picker, sticker keyboard, attachment menu (image · video · document · audio · location · contact · poll), media lightbox, per-thread search, read receipts, typing indicator, threaded replies, smart replies, an offline four-language translator, saved messages with notes, a notification feed, pinned-message view, a thread-scoped AI assistant, flag/report, kid-safe mode with guardian controls, and a Gibber sound-level channel for agent-to-agent traffic. The right rail carries the AI marketing CRM panel with lead score and next best action |
+| `/app/calls` | Twelve-key dialpad, call history with direction/duration/outcome, MOS and latency trend charts, microphone/camera/speaker profiles with a saved default, a packet-diagnostics modal (RTT, jitter, loss, MOS), a catalogue of native reference implementations (WebRTC Kotlin, VoIP Call Sample, Android Java Chat, Linphone iPhone, Linphone Core, a SIP↔WebRTC gateway and a recording pipeline), a browser-vs-native coverage matrix and the operational limits |
 | `/app/gateways` | Five live gateways — HTTP SMS, Domovina AI, ComfyUI, SIP and a webhook bridge. SMS console with cURL / Node SDK / raw JSON previews of the exact request, inbound-webhook routing with signature checks and retry rules, a ComfyUI prompt queue that shares the render straight into a chat, and a promise-based IPC console with per-channel latency and error stats |
+| `/app/callcenter` | A contact centre in five tabs — live desk (diarised transcript, PII redaction, live sentiment, assist cards, coaching nudges, talk-ratio/WPM/monologue metrics, supervisor wallboard), post-call (summary, key points, action items, risk flags, redacted transcript, six-axis QA scorecard, entity/topic/PII extraction), bot flow (scripted phases, tool catalogue, transitions, refusal examples), outbound (recipes, scheduler, consent gate with requested-vs-permitted fields, batch runner, unreached-vs-voicemail accounting) and integrations (workflow plugins, event names, MCP catalogue, inline JSON result) |
 
 ### CRM & Revenue
 | Module | What it does |
@@ -54,6 +55,7 @@ npm start           # production server on 0.0.0.0:3000
 | `/app/applications` | Status chips, per-application document checklist with third-party blockers, deadline risk, "where it stalls" analysis |
 | `/app/universities` | University catalogue with rankings, scholarships, per-year tuition, intakes, course requirements, tuition chart |
 | `/app/study` | Focus timer that auto-logs sessions, weekly plan, confidence tracking, skill radar |
+| `/app/tutor` | A voice-first English tutor that runs entirely on your own machine — seven CEFR levels, a local record→recognise→reason→synthesise speech pipeline, word-level highlighting with 0.8×/1.0×/1.2× playback, an offline dictionary with pronunciation, four exercise types, a 60-point pass mark, a buddy that evolves from an egg to a dragon, multi-learner profiles and certificates |
 
 ### AI Marketing
 | Module | What it does |
@@ -93,9 +95,18 @@ npm start           # production server on 0.0.0.0:3000
 | Module | What it does |
 | --- | --- |
 | `/app/radar` | Live market signals with impact and confidence, five competitor profiles, seasonal forecasts with explicit confidence bands |
-| `/app/research` | Crawl a page into clean markdown, then deep research that reads eight pages and cites every fact it keeps |
+| `/app/research` | Crawl a page into clean markdown, then deep research that reads eight pages and cites every fact it keeps. A second tab documents the **molx** self-hosted crawl API — every endpoint, request and response body, the thirteen environment variables, the Brave/DuckDuckGo/Startpage engines, the deployment recipes and the Firecrawl comparison |
+| `/app/swarm` | Multi-agent simulation: extract a weighted entity graph from seed text, generate personas with their own archetype, bias, speed and influence, run the conversation round by round, then read the focus-group report — sentiment, topic share, the people who moved the room, the opinion shift and the convergence score. Every run is reproducible from its seed |
 | `/app/logistics` | Air/sea/road/rail shipments, carriers, customs holds, incoterms, cargo value and a customs checklist |
 | `/app/builder` | Low-code dashboard builder — seven widget types, nine datasets, drag from the palette, save and reload |
+
+### Platform & AI
+| Module | What it does |
+| --- | --- |
+| `/app/chatkit` | The component inventory behind the messenger — 43 components across 7 families with live previews for 24 of them, platform parity for React/Angular/React Native/iOS/Android/Flutter, 17 theme tokens in four spellings, 10 locales (two right-to-left), the 10-point accessibility contract with focus order and screen-reader wording, and 18 extensions |
+| `/app/skills` | The pack that teaches an AI coding agent to build the messenger — 24 skills across 13 families, the four-stage onboarding journey (discover → understand → plan → approve), per-platform contract files, 12 iterative commands, and four MCP servers including the read-only documentation server with its tool catalogue and prompt recipes |
+| `/app/testing` | Test generation from plain English acceptance criteria — Robot Framework suites, pytest modules and a test-case sheet, with local or cloud providers, a generation log, coverage breakdown, five safe defaults and the project layout |
+| `/app/glossary` | The AI coding dictionary — 60+ terms across 8 categories, each with a plain-English explanation, cross links and a see-also line |
 
 ### Public site
 `/` · `/features` · `/templates` · `/showcase` · `/marketing-kit` ·
@@ -171,6 +182,42 @@ LinkedIn post, a short script and video scenes.
 blobs, grain and geometric overlays drawn deterministically from a prompt hash.
 Same prompt, same picture, every time — with no network call.
 
+**Gibberlink** (`src/lib/gibberlink.ts`) — a sound-level protocol for
+agent-to-agent traffic. A handshake confirms both sides are agents, the payload
+is framed with a length header and a checksum, base64-encoded and mapped onto
+64 tone symbols; each symbol resolves to a frequency pair, so the same token can
+be rendered as a tone sequence and read back from the waveform. Decoding is
+exact, or it reports why it could not.
+
+**Test generator** (`src/lib/robot.ts`) — plain-English acceptance criteria in,
+three artefacts out: a Robot Framework suite, a pytest module and a test-case
+sheet with steps, expected results and priority. Cases are derived from the
+sentences in the criteria, validated for syntax before they are written, and
+tagged as smoke, functional, regression, edge or negative.
+
+**Swarm engine** (`src/lib/swarm.ts`) — entity extraction into a weighted
+graph, persona generation with archetype, bias, reaction speed and influence, a
+round-by-round simulation with sentiment and topic propagation, and a
+focus-group report. Seeded end to end: the same seed always produces the same
+run, with no model in the loop.
+
+**Tutor engine** (`src/lib/tutor.ts`) — sentence analysis that finds articles,
+plural errors, subject-verb agreement problems, preposition slips and informal
+contractions, then writes the correction the way a teacher would say it, one
+thing at a time, with a CEFR estimate and a confidence score.
+
+**Call-centre engine** (`src/lib/callcenter.ts`) — PII redaction across eleven
+pattern families, sentiment and topic extraction, talk-ratio / words-per-minute /
+monologue metrics, coaching nudges, a six-axis QA scorecard, post-call
+summaries, a phase-based bot flow with tool-driven transitions, outbound recipes
+with a consent gate that strips fields the contact never permitted, workflow
+plugins and an MCP tool catalogue.
+
+**Offline translator** (`src/lib/translate.ts`) — a curated phrase table and a
+word table for Bengali, Spanish, French and Arabic. Longest phrases match
+first, and anything it cannot translate is reported rather than silently
+dropped.
+
 ---
 
 ## Architecture
@@ -181,20 +228,28 @@ src/
     layout.tsx          root layout, theme script, toaster, ⌘K palette
     page.tsx            marketing home
     features/ marketing-kit/ showcase/ pricing/ templates/ blog/ about/ contact/
-    app/                workspace shell + 37 module routes
+    app/                workspace shell + 42 module routes
   components/
     ui/                 Badge, Avatar, Progress, Toggle, Meter, Modal, Toaster, Reveal
     charts/             SVG charts: area, bar, donut, radar, funnel, heatmap, sparkline
     app/                Sidebar, Topbar, CommandPalette, PageHeader
     marketing/          MarketingHeader, MarketingFooter, ProductMock
     studio/             DiagramCanvas, GeneratedArt
-    messaging/          ChatBubble, CallOverlay, MediaViewer
+    messaging/          ChatBubble, CallOverlay, MediaViewer, ChatKitPreviews,
+                        ComposerExtras, Panels, Safety, GibberChannel
+    research/           MolxPanel
   lib/
     types.ts            every domain entity
-    nav.ts              8 nav groups, 37 routes
+    nav.ts              9 nav groups, 42 routes
     humanizer.ts        humaniser + SEO scorer + repurpose
     webrtc.ts           call engine, stats polling, MOS estimate
     ipc.ts              promise IPC bridge + desktop handlers
+    gibberlink.ts       sound-level protocol: frame, checksum, encode, decode
+    robot.ts            plain English → Robot Framework / pytest / test sheet
+    swarm.ts            persona generation, graph extraction, simulation
+    tutor.ts            sentence analysis, correction, tutor reply
+    callcenter.ts       redaction, sentiment, QA scoring, flow, consent
+    translate.ts        offline phrase + word translator for four languages
     data/               seed data for every module
   store/
     useStore.ts         one persisted domain store, ~75 CRUD actions
@@ -218,5 +273,5 @@ in-app preview renders the complete product with no network access.
 ## Verification
 
 - `./node_modules/.bin/tsc --noEmit` — clean, strict mode
-- `npm run build` — 53/53 static pages generated
-- All 45 routes return HTTP 200 from the production server
+- `npm run build` — 60/60 static pages generated
+- All 51 routes return HTTP 200 from the production server

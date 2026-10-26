@@ -29,6 +29,14 @@ import {
   MessageCircle,
   PhoneCall,
   RadioTower,
+  Headset,
+  ShieldCheck,
+  Blocks,
+  Wand2,
+  FlaskConical,
+  BookMarked,
+  Network,
+  Sparkles,
 } from "lucide-react";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
@@ -38,7 +46,7 @@ import { Badge } from "@/components/ui/primitives";
 export const metadata: Metadata = {
   title: "Features",
   description:
-    "Eight pillars, thirty-seven modules: private messaging and calling, revenue, education consultancy, AI marketing, creative studios, agents, knowledge systems and operational insight.",
+    "Nine pillars, forty-two modules: private messaging and calling, revenue, education consultancy, AI marketing, creative studios, agents, knowledge systems, operational insight and the platform tooling that makes an AI coding agent productive.",
 };
 
 interface Feature {
@@ -66,6 +74,12 @@ const pillars: { id: string; title: string; accent: string; lead: string; featur
           "Emoji picker, attachment menu and per-thread search",
           "Pin, mute, archive and read receipts on every conversation",
           "AI marketing CRM panel with lead score and next best action",
+          "Threaded replies that keep a side conversation out of the main one",
+          "Sticker keyboard, smart replies and an offline translator for four languages",
+          "Saved messages with notes, a notification feed and a pinned-message view",
+          "A thread-scoped AI assistant that drafts, summarises and extracts deadlines",
+          "Flag and report, with a reason, a detail field and a filed-report record",
+          "Gibber channel — a denser sound-level wire format for agent-to-agent traffic",
         ],
       },
       {
@@ -78,6 +92,30 @@ const pillars: { id: string; title: string; accent: string; lead: string; featur
           "Round trip, jitter, packet loss and a MOS estimate per call",
           "Microphone, camera and speaker profiles with a saved default",
           "Quality trends over time for MOS and latency",
+        ],
+      },
+      {
+        icon: Headset,
+        name: "Call centre",
+        blurb: "A contact centre that runs on live assist — transcripts with PII redaction, a QA scorecard, a bot flow, and a consent-gated outbound scheduler.",
+        points: [
+          "Live desk with a diarised transcript, live sentiment and coaching nudges",
+          "PII redaction on every transcript before it is stored",
+          "QA scorecard across greeting, discovery, empathy, ownership, resolution and compliance",
+          "Phase-based bot flow with tool-driven transitions and a human handover queue",
+          "Outbound scheduler that records consent, strips non-permitted fields and fails closed",
+          "Supervisor wallboard with queue depth, roster and a handled-by breakdown",
+        ],
+      },
+      {
+        icon: ShieldCheck,
+        name: "Kid-safe mode",
+        blurb: "A guardian layer that filters at the gateway, never on the device — so a blocked message is never even downloaded.",
+        points: [
+          "Four age bands with editable defaults for every guardian control",
+          "Approved contacts, quiet hours and a server-enforced screen-time budget",
+          "Keyword, link and media filters with a plain-language warning for the child",
+          "A dated, exportable safety log the guardian can read",
         ],
       },
       {
@@ -172,6 +210,19 @@ const pillars: { id: string; title: string; accent: string; lead: string; featur
           "Logged minutes compared against the plan",
           "Confidence rating to spot weak areas",
           "Weekly focus summary for students",
+        ],
+      },
+      {
+        icon: Sparkles,
+        name: "Language tutor",
+        blurb: "A voice-first English tutor that runs entirely on your own machine — a seven-level map, a local speech pipeline and one correction at a time.",
+        points: [
+          "Seven CEFR levels, ninety lessons, four exercise types and a 60-point pass mark",
+          "Offline speech pipeline: record, recognise, reason, synthesise — nothing is uploaded",
+          "Word-level highlighting with 0.8×, 1.0× and 1.2× playback",
+          "A 1,074-entry offline dictionary with pronunciation and review cards",
+          "A buddy that evolves from an egg to a dragon as magic points accumulate",
+          "Multi-learner profiles, reflection reports and certificates",
         ],
       },
     ],
@@ -434,6 +485,73 @@ const pillars: { id: string; title: string; accent: string; lead: string; featur
           "Capability matrix for reasoning, vision, tools and open weights",
         ],
       },
+      {
+        icon: Network,
+        name: "Swarm lab",
+        blurb: "Build a knowledge graph from a piece of text, give it believable people, then let the conversation run and watch the sentiment spread.",
+        points: [
+          "Entity extraction turns seed text into a weighted graph",
+          "Personas with their own archetype, bias, speed and influence",
+          "Round-by-round sentiment and topic propagation",
+          "A focus-group report with the verdict, the movers and the convergence score",
+          "Every run is reproducible from its seed — no model required",
+        ],
+      },
+    ],
+  },
+  {
+    id: "platform",
+    title: "Platform & AI tooling",
+    accent: "var(--color-brand-500)",
+    lead: "The layer that makes the rest of it buildable — a documented component kit, a skill pack that teaches an agent the product, test generation from plain English, and a dictionary of the jargon.",
+    features: [
+      {
+        icon: Blocks,
+        name: "Chat UI kit",
+        blurb: "Forty-three components across six platforms, with the theming and accessibility contracts spelled out.",
+        points: [
+          "Conversations, every bubble type, calling surfaces and AI surfaces",
+          "React, Angular, React Native, iOS, Android and Flutter parity",
+          "Seventeen theme tokens in four spellings, ten locales, two right-to-left",
+          "Ten accessibility checks and the focus order, screen-reader wording included",
+          "Eighteen extensions, each declaring the components it needs",
+        ],
+      },
+      {
+        icon: Wand2,
+        name: "Agent skills & MCP",
+        blurb: "The pack that teaches a coding agent to build the messenger — plus a read-only documentation server so it looks methods up instead of guessing.",
+        points: [
+          "Twenty-four skills across thirteen families, from the dispatcher to troubleshooting",
+          "A four-stage onboarding journey: discover, understand, plan, approve",
+          "Per-platform contract files listing components, features and events",
+          "A read-only MCP documentation server with a tool catalogue and prompt recipes",
+          "Ten iterative commands that route to one scoped skill each",
+        ],
+      },
+      {
+        icon: FlaskConical,
+        name: "Test generation",
+        blurb: "Write the acceptance criteria in plain English and get a Robot suite, a pytest module and a test-case sheet.",
+        points: [
+          "Requirements held as plain-English acceptance criteria",
+          "Robot Framework suites and pytest modules from one generation pass",
+          "A test-case sheet with steps, expected results and priority",
+          "Local or cloud providers, chosen per run",
+          "Generated files are syntax-validated before they are written",
+        ],
+      },
+      {
+        icon: BookMarked,
+        name: "AI coding dictionary",
+        blurb: "Every term an AI coding tool throws at you, in plain English, cross-linked to the terms it leans on.",
+        points: [
+          "Sixty-plus terms across eight categories",
+          "What it means, why it matters and what breaks without it",
+          "Cross links between related terms and a see-also line",
+          "Nothing to install and no key to configure",
+        ],
+      },
     ],
   },
 ];
@@ -448,7 +566,7 @@ export default function FeaturesPage() {
         <div className="relative mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
           <Reveal className="mx-auto max-w-3xl text-center">
             <span className="chip border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-800 dark:bg-brand-950/60 dark:text-brand-300">
-              37 modules · 8 pillars
+              42 modules · 9 pillars
             </span>
             <h1 className="mt-5 text-4xl font-bold tracking-tight sm:text-5xl">
               Everything below ships in <GradientText>every plan</GradientText>

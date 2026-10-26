@@ -20,6 +20,8 @@ import {
   TrendingUp,
   Users,
   PhoneCall,
+  Headset,
+  Blocks,
   MessageCircle,
   RadioTower,
 } from "lucide-react";
@@ -245,6 +247,14 @@ export default function DashboardPage() {
           <Link href="/app/gateways" className="btn btn-secondary btn-sm">
             <RadioTower className="size-3.5" />
             Gateways
+          </Link>
+          <Link href="/app/callcenter" className="btn btn-secondary btn-sm">
+            <Headset className="size-3.5" />
+            Call centre
+          </Link>
+          <Link href="/app/chatkit" className="btn btn-secondary btn-sm">
+            <Blocks className="size-3.5" />
+            Chat UI kit
           </Link>
         </div>
 

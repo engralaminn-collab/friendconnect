@@ -565,6 +565,75 @@ export interface EventItem {
   duration?: number;
 }
 
+/* ------------------------------------------------------------------ */
+/* Messenger extras: safety, saved items, threads, assistant, reports    */
+/* ------------------------------------------------------------------ */
+
+export interface SafetySettings {
+  /** Kid-safe mode is on. */
+  kidSafe: boolean;
+  /** Which age band the defaults were built for. */
+  ageBand: "under_8" | "9_12" | "13_15" | "16_plus";
+  /** Guardian display name. */
+  guardian: string;
+  /** Every guardian control, keyed by its id. */
+  controls: Record<string, string>;
+  /** Minutes of screen time left today. */
+  budgetLeftMin: number;
+  /** Whether live location may be shared in this thread. */
+  locationAllowed: boolean;
+}
+
+export interface SavedMessage {
+  id: ID;
+  threadId: ID;
+  threadName: string;
+  author: string;
+  body: string;
+  at: string;
+  note: string;
+  tag: "important" | "reference" | "todo" | "attachment";
+}
+
+export interface ThreadReply {
+  id: ID;
+  rootId: ID;
+  from: "me" | "them";
+  author: string;
+  body: string;
+  at: string;
+}
+
+export interface AssistantTurn {
+  id: ID;
+  role: "user" | "assistant";
+  body: string;
+  at: string;
+  chips?: string[];
+}
+
+export interface MessageReport {
+  id: ID;
+  at: string;
+  threadName: string;
+  messageBody: string;
+  reason: string;
+  detail: string;
+  status: "received" | "reviewing" | "actioned" | "closed";
+}
+
+export interface FeedEvent {
+  id: ID;
+  at: string;
+  kind: "message" | "call" | "mention" | "safety" | "system";
+  title: string;
+  body: string;
+  threadId?: ID;
+  read: boolean;
+  actor?: string;
+  hue?: number;
+}
+
 export interface Notification {
   id: ID;
   title: string;

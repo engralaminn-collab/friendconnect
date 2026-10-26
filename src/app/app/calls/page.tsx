@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   Activity,
+  BookOpen,
   Camera,
   CameraOff,
   ChevronRight,
@@ -10,6 +11,7 @@ import {
   Cpu,
   Gauge,
   Headphones,
+  Layers,
   Mic,
   MicOff,
   Phone,
@@ -18,6 +20,7 @@ import {
   PhoneOff,
   Plus,
   Radio,
+  Scale,
   Signal,
   SlidersHorizontal,
   Trash2,
@@ -25,6 +28,11 @@ import {
   X,
 } from "lucide-react";
 import { PageHeader, StatCard, FilterChip } from "@/components/app/PageHeader";
+import {
+  CALL_ENGINE_COVERAGE,
+  CALL_LIMITS,
+  NATIVE_CALL_SAMPLES,
+} from "@/lib/data/native-calls";
 import { Modal } from "@/components/ui/Modal";
 import { Badge, EmptyState, Progress } from "@/components/ui/primitives";
 import { AreaChart, BarChart } from "@/components/charts";
@@ -486,6 +494,118 @@ export default function CallsPage() {
             </ul>
           </div>
         </aside>
+      </div>
+
+      {/* ---------------- Native reference implementations ---------------- */}
+      <div className="mt-4 grid gap-4 xl:grid-cols-[1.25fr_1fr]">
+        <div className="fc-card overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-[var(--fc-line)] bg-[var(--fc-surface-2)] px-5 py-3">
+            <BookOpen className="size-4 text-[var(--color-brand-500)]" />
+            <h2 className="text-[15px] font-semibold">
+              Native reference implementations
+            </h2>
+            <span className="ml-auto text-[11px] text-[var(--fc-fg-subtle)]">
+              {NATIVE_CALL_SAMPLES.length} samples
+            </span>
+          </div>
+          <ul className="divide-y divide-[var(--fc-line)]">
+            {NATIVE_CALL_SAMPLES.map((s) => (
+              <li key={s.id} className="px-5 py-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className="grid size-8 shrink-0 place-items-center rounded-lg text-[11px] font-bold text-white"
+                    style={{ backgroundColor: s.accent }}
+                  >
+                    {s.platform.slice(0, 2).toUpperCase()}
+                  </span>
+                  <span className="text-[13.5px] font-semibold">{s.name}</span>
+                  <Badge>{s.platform}</Badge>
+                  <Badge>{s.language}</Badge>
+                  <Badge tone="accent">{s.licence}</Badge>
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {s.stack.map((t) => (
+                    <span
+                      key={t}
+                      className="rounded bg-[var(--fc-surface-3)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--fc-fg-muted)]"
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+                <p className="mt-2 text-[12.5px] leading-relaxed text-[var(--fc-fg-muted)]">
+                  {s.demo}
+                </p>
+                <p className="mt-1.5 border-l-2 border-[var(--color-brand-500)] pl-2.5 text-[12px] leading-relaxed">
+                  {s.teaches}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="space-y-4">
+          <div className="fc-card overflow-hidden">
+            <div className="flex items-center gap-2 border-b border-[var(--fc-line)] bg-[var(--fc-surface-2)] px-5 py-3">
+              <Layers className="size-4 text-[var(--color-accent-500)]" />
+              <h2 className="text-[15px] font-semibold">
+                Browser vs native coverage
+              </h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[11.5px]">
+                <thead className="bg-[var(--fc-surface-2)] text-[10px] uppercase tracking-wide text-[var(--fc-fg-subtle)]">
+                  <tr>
+                    <th className="px-4 py-2 font-semibold">Layer</th>
+                    <th className="px-4 py-2 font-semibold">Browser</th>
+                    <th className="px-4 py-2 font-semibold">Native</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--fc-line)]">
+                  {CALL_ENGINE_COVERAGE.map((c) => (
+                    <tr key={c.layer}>
+                      <td className="px-4 py-2 align-top">
+                        <span className="block font-semibold">{c.layer}</span>
+                        <span className="mt-0.5 block text-[10.5px] text-[var(--fc-fg-subtle)]">
+                          {c.note}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 align-top text-emerald-500">
+                        {c.browser}
+                      </td>
+                      <td className="px-4 py-2 align-top text-[var(--fc-fg-muted)]">
+                        {c.native}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="fc-card p-5">
+            <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+              <Scale className="size-4 text-[var(--color-violet-500)]" />
+              Operational limits
+            </h2>
+            <ul className="mt-3 space-y-2">
+              {CALL_LIMITS.map((l) => (
+                <li
+                  key={l.id}
+                  className="rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12.5px] font-semibold">{l.label}</span>
+                    <Badge tone="accent">{l.value}</Badge>
+                  </div>
+                  <p className="mt-0.5 text-[11.5px] leading-relaxed text-[var(--fc-fg-muted)]">
+                    {l.why}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
       </div>
 
       {/* ---------------- Call overlay ---------------- */}

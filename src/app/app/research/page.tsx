@@ -11,10 +11,12 @@ import {
   Plus,
   ScanText,
   Search,
+  Server,
   Sparkles,
   Wand2,
 } from "lucide-react";
 import { PageHeader, StatCard, FilterChip } from "@/components/app/PageHeader";
+import { MolxPanel } from "@/components/research/MolxPanel";
 import { Modal } from "@/components/ui/Modal";
 import { Badge, EmptyState, Progress } from "@/components/ui/primitives";
 import { useToast } from "@/store/useUI";
@@ -104,6 +106,7 @@ export default function ResearchPage() {
     { label: string; detail: string; status: "pending" | "running" | "done" }[]
   >([]);
   const [researchRunning, setResearchRunning] = React.useState(false);
+  const [view, setView] = React.useState<"crawler" | "molx">("crawler");
 
   const active = results.find((r) => r.id === activeId) ?? null;
 
@@ -239,6 +242,35 @@ export default function ResearchPage() {
           tone="signal"
         />
       </div>
+
+      <div className="mt-4 flex flex-wrap gap-1.5">
+        {(
+          [
+            { id: "crawler", label: "Crawler", icon: ScanText },
+            { id: "molx", label: "Self-hosted API (molx)", icon: Server },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setView(t.id)}
+            className={cn(
+              "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-semibold transition-colors",
+              view === t.id
+                ? "bg-[var(--color-brand-500)]/[0.12] text-[var(--color-brand-500)]"
+                : "text-[var(--fc-fg-muted)] hover:bg-[var(--fc-surface-2)]",
+            )}
+          >
+            <t.icon className="size-3.5" />
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {view === "molx" ? (
+        <div className="mt-4">
+          <MolxPanel />
+        </div>
+      ) : (
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[360px_1fr]">
         <div className="space-y-4">
@@ -476,6 +508,8 @@ export default function ResearchPage() {
           )}
         </div>
       </div>
+
+      )}
 
       {/* ---------------- Research modal ---------------- */}
       <Modal

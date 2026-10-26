@@ -19,7 +19,7 @@ const plans = [
     href: "/app",
     featured: false,
     features: [
-      "All 34 modules, no feature gating",
+      "All 42 modules, no feature gating",
       "Local-first browser storage",
       "3 agent runs per day",
       "Community feed read + post",

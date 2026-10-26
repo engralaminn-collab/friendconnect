@@ -19,6 +19,10 @@ import {
   Reply,
   Star,
   Trash2,
+  Bookmark,
+  Languages,
+  MessageSquare,
+  Flag,
   User2,
   Vote,
 } from "lucide-react";
@@ -49,6 +53,11 @@ export function ChatBubble({
   onOpenMedia,
   onVote,
   isLast,
+  onThread,
+  onSave,
+  onTranslate,
+  onReport,
+  threadCount = 0,
 }: {
   message: Message;
   thread: Thread;
@@ -60,6 +69,11 @@ export function ChatBubble({
   onOpenMedia: (m: Message) => void;
   onVote: (optionIndex: number) => void;
   isLast: boolean;
+  onThread?: (m: Message) => void;
+  onSave?: (m: Message) => void;
+  onTranslate?: (m: Message) => void;
+  onReport?: (m: Message) => void;
+  threadCount?: number;
 }) {
   const mine = message.from === "me";
   const [showReactions, setShowReactions] = React.useState(false);
@@ -444,6 +458,47 @@ export function ChatBubble({
             >
               <Star className="size-3.5" />
             </button>
+            {onThread && (
+              <button
+                onClick={() => onThread(message)}
+                className="relative grid size-7 place-items-center rounded-lg text-[var(--fc-fg-muted)] transition-transform hover:scale-125"
+                title="Reply in a thread"
+              >
+                <MessageSquare className="size-3.5" />
+                {threadCount > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 grid size-3.5 place-items-center rounded-full bg-[var(--color-brand-500)] text-[8px] font-bold text-white">
+                    {threadCount}
+                  </span>
+                )}
+              </button>
+            )}
+            {onSave && (
+              <button
+                onClick={() => onSave(message)}
+                className="grid size-7 place-items-center rounded-lg text-[var(--fc-fg-muted)] transition-transform hover:scale-125"
+                title="Save"
+              >
+                <Bookmark className="size-3.5" />
+              </button>
+            )}
+            {onTranslate && (
+              <button
+                onClick={() => onTranslate(message)}
+                className="grid size-7 place-items-center rounded-lg text-[var(--fc-fg-muted)] transition-transform hover:scale-125"
+                title="Translate"
+              >
+                <Languages className="size-3.5" />
+              </button>
+            )}
+            {onReport && (
+              <button
+                onClick={() => onReport(message)}
+                className="grid size-7 place-items-center rounded-lg text-[var(--fc-fg-muted)] transition-transform hover:scale-125 hover:text-rose-500"
+                title="Report"
+              >
+                <Flag className="size-3.5" />
+              </button>
+            )}
             {mine && (
               <button
                 onClick={() => onDelete()}

@@ -9,19 +9,25 @@ import {
   Camera,
   ChevronDown,
   FileText,
+  Flag,
   Image as ImageIcon,
   Link2,
   MapPin,
+  MessageSquare,
   Mic,
   MoreVertical,
   Paperclip,
   Phone,
   Pin,
   Plus,
+  Radio,
   Search,
   Send,
+  ShieldCheck,
   Smile,
+  Sparkles,
   Star,
+  Sticker as StickerIcon,
   Trash2,
   UserPlus,
   Video,
@@ -36,6 +42,20 @@ import { Avatar, Badge, EmptyState, Progress } from "@/components/ui/primitives"
 import { ChatBubble, TypingIndicator } from "@/components/messaging/ChatBubble";
 import { CallOverlay } from "@/components/messaging/CallOverlay";
 import { MediaViewer } from "@/components/messaging/MediaViewer";
+import {
+  SmartReplies,
+  StickerKeyboard,
+  TranslateInline,
+} from "@/components/messaging/ComposerExtras";
+import {
+  AiAssistantPanel,
+  MessageThreadPanel,
+  NotificationFeed,
+  SavedMessagesPanel,
+  assistantAnswerFor,
+} from "@/components/messaging/Panels";
+import { KidSafePanel, ReportDialog } from "@/components/messaging/Safety";
+import { GibberChannel } from "@/components/messaging/GibberChannel";
 import { GeneratedArt } from "@/components/studio/GeneratedArt";
 import { useStore } from "@/store/useStore";
 import { useToast } from "@/store/useUI";
@@ -75,6 +95,25 @@ export default function MessengerPage() {
   const setThreadTyping = useStore((s) => s.setThreadTyping);
   const markThreadRead = useStore((s) => s.markThreadRead);
   const addCall = useStore((s) => s.addCall);
+  const safety = useStore((s) => s.safety);
+  const setKidSafe = useStore((s) => s.setKidSafe);
+  const updateSafety = useStore((s) => s.updateSafety);
+  const setSafetyControl = useStore((s) => s.setSafetyControl);
+  const gibberThreads = useStore((s) => s.gibberThreads);
+  const toggleGibberThread = useStore((s) => s.toggleGibberThread);
+  const savedMessages = useStore((s) => s.savedMessages);
+  const saveMessageItem = useStore((s) => s.saveMessageItem);
+  const removeSavedMessage = useStore((s) => s.removeSavedMessage);
+  const messageThreads = useStore((s) => s.messageThreads);
+  const addThreadReply = useStore((s) => s.addThreadReply);
+  const assistantChats = useStore((s) => s.assistantChats);
+  const addAssistantTurn = useStore((s) => s.addAssistantTurn);
+  const clearAssistantChat = useStore((s) => s.clearAssistantChat);
+  const reports = useStore((s) => s.reports);
+  const reportMessage = useStore((s) => s.reportMessage);
+  const feed = useStore((s) => s.feed);
+  const markFeedRead = useStore((s) => s.markFeedRead);
+  const markAllFeedRead = useStore((s) => s.markAllFeedRead);
   const toast = useToast();
 
   const [scope, setScope] = React.useState<Scope>("all");
@@ -116,6 +155,20 @@ export default function MessengerPage() {
     "Wednesday afternoon",
     "Thursday morning",
   ]);
+  const [railTab, setRailTab] = React.useState<
+    "details" | "feed" | "saved"
+  >("details");
+  const [showStickers, setShowStickers] = React.useState(false);
+  const [showSmart, setShowSmart] = React.useState(true);
+  const [threadRoot, setThreadRoot] = React.useState<Message | null>(null);
+  const [assistantOpen, setAssistantOpen] = React.useState(false);
+  const [gibberOpen, setGibberOpen] = React.useState(false);
+  const [safetyOpen, setSafetyOpen] = React.useState(false);
+  const [pinnedOpen, setPinnedOpen] = React.useState(false);
+  const [reportTarget, setReportTarget] = React.useState<Message | null>(null);
+  const [translateTarget, setTranslateTarget] = React.useState<Message | null>(
+    null,
+  );
 
   const engineRef = React.useRef<CallEngine | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -345,6 +398,7 @@ export default function MessengerPage() {
     (a, t) => a + t.messages.filter((m) => m.starred).length,
     0,
   );
+  const feedUnread = feed.filter((f) => !f.read).length;
 
   /* ---------------- render ---------------- */
 
@@ -355,13 +409,35 @@ export default function MessengerPage() {
         title="Messenger"
         description="A private messaging workspace — chat, share images, video, voice notes and documents, and call the person without leaving the thread."
         actions={
-          <div className="flex gap-1.5">
+          <div className="flex flex-wrap gap-1.5">
             <button
               onClick={() => setShowNewChat(true)}
               className="btn btn-secondary btn-sm"
             >
               <Plus className="size-3.5" />
               New chat
+            </button>
+            <button
+              onClick={() => setRailTab("feed")}
+              className="btn btn-secondary btn-sm relative"
+            >
+              <Bell className="size-3.5" />
+              Notifications
+              {feedUnread > 0 && (
+                <span className="ml-1 rounded-full bg-[var(--color-brand-500)] px-1.5 text-[10px] text-white">
+                  {feedUnread}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setSafetyOpen(true)}
+              className={cn(
+                "btn btn-sm",
+                safety.kidSafe ? "btn-primary" : "btn-secondary",
+              )}
+            >
+              <ShieldCheck className="size-3.5" />
+              Kid-safe
             </button>
             <button
               onClick={() => setScope(scope === "archived" ? "all" : "archived")}
@@ -617,6 +693,42 @@ export default function MessengerPage() {
                   <Video className="size-4" />
                 </button>
                 <button
+                  onClick={() => setPinnedOpen(true)}
+                  className="grid size-9 place-items-center rounded-lg text-[var(--fc-fg-muted)] transition-colors hover:bg-[var(--fc-surface-2)] hover:text-[var(--color-signal-500)]"
+                  title="Pinned messages"
+                >
+                  <Star className="size-4" />
+                </button>
+                <button
+                  onClick={() => setThreadRoot(active.messages[active.messages.length - 1] ?? null)}
+                  className="grid size-9 place-items-center rounded-lg text-[var(--fc-fg-muted)] transition-colors hover:bg-[var(--fc-surface-2)] hover:text-[var(--color-brand-500)]"
+                  title="Open the last thread"
+                >
+                  <MessageSquare className="size-4" />
+                </button>
+                <button
+                  onClick={() => setAssistantOpen(true)}
+                  className="grid size-9 place-items-center rounded-lg text-[var(--fc-fg-muted)] transition-colors hover:bg-[var(--fc-surface-2)] hover:text-[var(--color-violet-500)]"
+                  title="AI assistant"
+                >
+                  <Sparkles className="size-4" />
+                </button>
+                <button
+                  onClick={() => {
+                    toggleGibberThread(active.id);
+                    setGibberOpen(true);
+                  }}
+                  className={cn(
+                    "grid size-9 place-items-center rounded-lg transition-colors hover:bg-[var(--fc-surface-2)]",
+                    gibberThreads.includes(active.id)
+                      ? "text-[var(--color-violet-500)]"
+                      : "text-[var(--fc-fg-muted)]",
+                  )}
+                  title="Gibber channel"
+                >
+                  <Radio className="size-4" />
+                </button>
+                <button
                   onClick={() => setShowInfo(true)}
                   className="grid size-9 place-items-center rounded-lg text-[var(--fc-fg-muted)] transition-colors hover:bg-[var(--fc-surface-2)]"
                   title="Details"
@@ -721,6 +833,21 @@ export default function MessengerPage() {
                         }
                       }}
                       onVote={(i2) => votePoll(active.id, m.id, i2)}
+                      onThread={(mm) => setThreadRoot(mm)}
+                      threadCount={(messageThreads[m.id] ?? []).length}
+                      onSave={(mm) => {
+                        saveMessageItem({
+                          threadId: active.id,
+                          threadName: active.contactName,
+                          author: mm.from === "me" ? "You" : active.contactName,
+                          body: mm.media?.caption ?? mm.body ?? mm.media?.name ?? "Attachment",
+                          note: "",
+                          tag: mm.media ? "attachment" : "important",
+                        });
+                        toast.success("Saved", "Kept in your saved messages.");
+                      }}
+                      onTranslate={(mm) => setTranslateTarget(mm)}
+                      onReport={(mm) => setReportTarget(mm)}
                     />
                   ))}
 
@@ -742,6 +869,32 @@ export default function MessengerPage() {
                   <button onClick={() => setReplyTo(null)}>
                     <X className="size-3.5 text-[var(--fc-fg-subtle)]" />
                   </button>
+                </div>
+              )}
+
+              {/* Smart replies */}
+              {showSmart && !recording && (
+                <div className="border-t border-[var(--fc-line)] px-3 pt-2.5">
+                  <SmartReplies
+                    onPick={(r) => {
+                      setDraft((d) => (d ? `${d} ${r.text}` : r.text));
+                      setShowSmart(false);
+                    }}
+                    onDismiss={() => setShowSmart(false)}
+                  />
+                </div>
+              )}
+
+              {/* Sticker keyboard */}
+              {showStickers && (
+                <div className="border-t border-[var(--fc-line)] px-3 pt-2.5">
+                  <StickerKeyboard
+                    onPick={(emoji) => {
+                      setDraft((d) => d + emoji);
+                      setShowStickers(false);
+                    }}
+                    onClose={() => setShowStickers(false)}
+                  />
                 </div>
               )}
 
@@ -794,6 +947,18 @@ export default function MessengerPage() {
                       title="Emoji"
                     >
                       <Smile className="size-4" />
+                    </button>
+                    <button
+                      onClick={() => setShowStickers((v) => !v)}
+                      className={cn(
+                        "grid size-9 shrink-0 place-items-center rounded-lg transition-colors hover:bg-[var(--fc-surface-2)]",
+                        showStickers
+                          ? "text-[var(--color-brand-500)]"
+                          : "text-[var(--fc-fg-muted)]",
+                      )}
+                      title="Stickers"
+                    >
+                      <StickerIcon className="size-4" />
                     </button>
 
                     <div className="relative flex-1">
@@ -964,7 +1129,40 @@ export default function MessengerPage() {
                 </div>
               </div>
 
-              {contact && (
+              <div className="flex gap-1 border-b border-[var(--fc-line)] px-3 py-2">
+                {(
+                  [
+                    { id: "details", l: "Details" },
+                    { id: "feed", l: "Feed" },
+                    { id: "saved", l: "Saved" },
+                  ] as const
+                ).map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setRailTab(t.id)}
+                    className={cn(
+                      "rounded-lg px-2.5 py-1 text-[11.5px] font-semibold transition-colors",
+                      railTab === t.id
+                        ? "bg-[var(--color-brand-500)]/[0.12] text-[var(--color-brand-500)]"
+                        : "text-[var(--fc-fg-muted)] hover:bg-[var(--fc-surface-2)]",
+                    )}
+                  >
+                    {t.l}
+                    {t.id === "feed" && feedUnread > 0 && (
+                      <span className="ml-1.5 rounded-full bg-[var(--color-brand-500)] px-1.5 text-[10px] text-white">
+                        {feedUnread}
+                      </span>
+                    )}
+                    {t.id === "saved" && savedMessages.length > 0 && (
+                      <span className="ml-1.5 rounded-full bg-[var(--fc-surface-3)] px-1.5 text-[10px]">
+                        {savedMessages.length}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {contact && railTab === "details" && (
                 <div className="border-b border-[var(--fc-line)] p-4">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-[var(--fc-fg-subtle)]">
@@ -1013,6 +1211,8 @@ export default function MessengerPage() {
               )}
 
               <div className="flex-1 overflow-y-auto p-4">
+                {railTab === "details" && (
+                  <>
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-[var(--fc-fg-subtle)]">
                     Shared media
@@ -1094,6 +1294,33 @@ export default function MessengerPage() {
                       ))}
                     </ul>
                   </div>
+                )}
+                  </>
+                )}
+
+                {railTab === "feed" && (
+                  <NotificationFeed
+                    feed={feed}
+                    onOpen={(threadId) => {
+                      if (threadId) {
+                        setActiveId(threadId);
+                        setMobileChat(true);
+                      }
+                    }}
+                    onRead={markFeedRead}
+                    onReadAll={markAllFeedRead}
+                  />
+                )}
+
+                {railTab === "saved" && (
+                  <SavedMessagesPanel
+                    items={savedMessages}
+                    onRemove={removeSavedMessage}
+                    onOpen={(threadId) => {
+                      setActiveId(threadId);
+                      setMobileChat(true);
+                    }}
+                  />
                 )}
               </div>
             </>
@@ -1433,6 +1660,186 @@ export default function MessengerPage() {
           </div>
         )}
       </Modal>
+
+      {/* ---------------- Thread panel ---------------- */}
+      <Modal
+        open={!!threadRoot}
+        onClose={() => setThreadRoot(null)}
+        title="Message thread"
+        description="Replies that belong together, kept out of the main conversation."
+        size="md"
+      >
+        {threadRoot && active && (
+          <div className="h-[480px]">
+            <MessageThreadPanel
+              rootBody={threadRoot.media?.caption ?? threadRoot.body}
+              replies={messageThreads[threadRoot.id] ?? []}
+              onSend={(body) => {
+                addThreadReply(
+                  active.id,
+                  threadRoot.id,
+                  body,
+                  "me",
+                  "You",
+                );
+                toast.success("Reply added", "Only the people in the thread see it.");
+              }}
+              onClose={() => setThreadRoot(null)}
+            />
+          </div>
+        )}
+      </Modal>
+
+      {/* ---------------- AI assistant ---------------- */}
+      <Modal
+        open={assistantOpen}
+        onClose={() => setAssistantOpen(false)}
+        title="AI assistant"
+        description="Reads this conversation and helps you answer it. It never posts without you."
+        size="md"
+      >
+        <div className="h-[520px]">
+          <AiAssistantPanel
+            turns={active ? (assistantChats[active.id] ?? []) : []}
+            onAsk={(q) => {
+              if (!active) return;
+              addAssistantTurn(active.id, { role: "user", body: q });
+              addAssistantTurn(active.id, {
+                role: "assistant",
+                body: assistantAnswerFor(q),
+              });
+            }}
+            onReset={() => {
+              if (active) clearAssistantChat(active.id);
+            }}
+          />
+        </div>
+      </Modal>
+
+      {/* ---------------- Gibber channel ---------------- */}
+      <Modal
+        open={gibberOpen}
+        onClose={() => setGibberOpen(false)}
+        title="Gibber channel"
+        description="A denser wire format for agent-to-agent traffic, carried as tone pairs."
+        size="md"
+      >
+        {active && (
+          <div className="h-[540px]">
+            <GibberChannel
+              contactName={active.contactName}
+              onSend={(token, text) => {
+                sendMessage(active.id, `[${token}] ${text}`);
+                toast.success("Sent on the wire", "Framed, checksummed and delivered.");
+              }}
+              onBack={() => setGibberOpen(false)}
+            />
+          </div>
+        )}
+      </Modal>
+
+      {/* ---------------- Kid-safe ---------------- */}
+      <Modal
+        open={safetyOpen}
+        onClose={() => setSafetyOpen(false)}
+        title="Kid-safe mode"
+        description="The guardian's side of the messenger — who can reach the child, what gets filtered, and what the safety log records."
+        size="lg"
+      >
+        <div className="max-h-[70vh] overflow-y-auto">
+          <KidSafePanel
+            safety={safety}
+            onSetControl={setSafetyControl}
+            onToggle={setKidSafe}
+            onSetAgeBand={(band) => {
+              updateSafety({ ageBand: band });
+              setKidSafe(true);
+            }}
+          />
+        </div>
+      </Modal>
+
+      {/* ---------------- Pinned messages ---------------- */}
+      <Modal
+        open={pinnedOpen}
+        onClose={() => setPinnedOpen(false)}
+        title="Pinned messages"
+        description="The messages you starred in this conversation — the ones worth keeping."
+        size="md"
+      >
+        <ul className="space-y-2">
+          {active?.messages
+            .filter((m) => m.starred)
+            .map((m) => (
+              <li
+                key={m.id}
+                className="rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-3"
+              >
+                <div className="flex items-center gap-2">
+                  <Star className="size-3 fill-[var(--color-signal-500)] text-[var(--color-signal-500)]" />
+                  <span className="text-[12px] font-semibold">
+                    {m.from === "me" ? "You" : active.contactName}
+                  </span>
+                  <span className="ml-auto text-[10.5px] text-[var(--fc-fg-subtle)]">
+                    {relativeTime(m.at)}
+                  </span>
+                </div>
+                <p className="mt-1 text-[12.5px] leading-relaxed">
+                  {m.media?.caption ?? m.body ?? m.media?.name}
+                </p>
+              </li>
+            ))}
+          {(active?.messages.filter((m) => m.starred).length ?? 0) === 0 && (
+            <li className="rounded-xl border border-dashed border-[var(--fc-line)] p-6 text-center text-[12.5px] text-[var(--fc-fg-subtle)]">
+              Nothing pinned here yet. Star a message to keep it.
+            </li>
+          )}
+        </ul>
+        {reports.length > 0 && (
+          <div className="mt-3 flex items-center gap-2 rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] px-3 py-2 text-[11.5px] text-[var(--fc-fg-muted)]">
+            <Flag className="size-3.5 shrink-0" />
+            {reports.length} report{reports.length === 1 ? "" : "s"} filed from this
+            workspace — the safety team reviews each one.
+          </div>
+        )}
+      </Modal>
+
+      {/* ---------------- Translate ---------------- */}
+      <Modal
+        open={!!translateTarget}
+        onClose={() => setTranslateTarget(null)}
+        title="Translate"
+        description="The offline translation pack — no request leaves the device."
+        size="sm"
+      >
+        {translateTarget && (
+          <TranslateInline
+            body={translateTarget.media?.caption ?? translateTarget.body}
+            onClose={() => setTranslateTarget(null)}
+          />
+        )}
+      </Modal>
+
+      {/* ---------------- Report ---------------- */}
+      <ReportDialog
+        open={!!reportTarget}
+        onClose={() => setReportTarget(null)}
+        threadName={active?.contactName ?? "the conversation"}
+        messageBody={
+          reportTarget?.media?.caption ?? reportTarget?.body ?? "Attachment"
+        }
+        onSubmit={(reason, detail) => {
+          if (!active || !reportTarget) return;
+          reportMessage({
+            threadName: active.contactName,
+            messageBody:
+              reportTarget.media?.caption ?? reportTarget.body ?? "Attachment",
+            reason,
+            detail,
+          });
+          toast.success("Report sent", "The safety team will review it.");
+        }}
+      />
     </div>
   );
 }

@@ -24,6 +24,7 @@ import type {
   ImageJob,
   Lead,
   Message,
+  MessageReport,
   Note,
   Notification,
   Plugin,
@@ -34,6 +35,11 @@ import type {
   Student,
   StudySession,
   Thread,
+  ThreadReply,
+  SavedMessage,
+  SafetySettings,
+  AssistantTurn,
+  FeedEvent,
   University,
   VideoProject,
   VoiceClip,
@@ -79,6 +85,8 @@ import {
   seedDevices,
   seedGateways,
 } from "@/lib/data/messaging";
+import { FEED_NOTIFICATIONS } from "@/lib/data/messagingExtras";
+import { bandDefaults, GUARDIAN_CONTROLS } from "@/lib/data/safety";
 
 export interface AppState {
   /* ---------- CRM ---------- */
@@ -119,6 +127,18 @@ export interface AppState {
   posts: Post[];
   events: EventItem[];
   notifications: Notification[];
+
+  /* ---------- Messenger extras ---------- */
+  safety: SafetySettings;
+  /** Thread ids switched into the gibberlink sound-level protocol. */
+  gibberThreads: ID[];
+  savedMessages: SavedMessage[];
+  /** Replies inside a message thread, keyed by the root message id. */
+  messageThreads: Record<string, ThreadReply[]>;
+  /** AI assistant conversations, keyed by thread id. */
+  assistantChats: Record<string, AssistantTurn[]>;
+  reports: MessageReport[];
+  feed: FeedEvent[];
 
   /* ---------- Actions: CRM ---------- */
   addContact: (contact: Omit<Contact, "id" | "createdAt" | "lastContact" | "avatarHue">) => Contact;
@@ -201,6 +221,19 @@ export interface AppState {
   createThread: (thread: Omit<Thread, "id" | "updatedAt" | "unread" | "messages">) => Thread;
   markNotificationRead: (id: ID) => void;
   markAllNotificationsRead: () => void;
+  /* ---------- Messenger extras ---------- */
+  setKidSafe: (on: boolean) => void;
+  updateSafety: (patch: Partial<SafetySettings>) => void;
+  setSafetyControl: (id: string, value: string) => void;
+  toggleGibberThread: (id: ID) => void;
+  saveMessageItem: (item: Omit<SavedMessage, "id" | "at">) => SavedMessage;
+  removeSavedMessage: (id: ID) => void;
+  addThreadReply: (threadId: ID, rootId: ID, body: string, from: "me" | "them", author: string) => void;
+  addAssistantTurn: (threadId: ID, turn: Omit<AssistantTurn, "id" | "at">) => void;
+  clearAssistantChat: (threadId: ID) => void;
+  reportMessage: (report: Omit<MessageReport, "id" | "at" | "status">) => void;
+  markFeedRead: (id: ID) => void;
+  markAllFeedRead: () => void;
   resetWorkspace: () => void;
 }
 
@@ -242,6 +275,23 @@ const initialState = {
   posts: seedPosts,
   events: seedEvents,
   notifications: seedNotifications,
+  safety: {
+    kidSafe: false,
+    ageBand: "9_12" as const,
+    guardian: "Amara Osei",
+    controls: GUARDIAN_CONTROLS.reduce<Record<string, string>>((acc, c) => {
+      acc[c.id] = c.default;
+      return acc;
+    }, {}),
+    budgetLeftMin: 27,
+    locationAllowed: false,
+  },
+  gibberThreads: [] as ID[],
+  savedMessages: [] as SavedMessage[],
+  messageThreads: {} as Record<string, ThreadReply[]>,
+  assistantChats: {} as Record<string, AssistantTurn[]>,
+  reports: [] as MessageReport[],
+  feed: FEED_NOTIFICATIONS as FeedEvent[],
 };
 
 export const useStore = create<AppState>()(
@@ -787,6 +837,107 @@ export const useStore = create<AppState>()(
         })),
       markAllNotificationsRead: () =>
         set((s) => ({ notifications: s.notifications.map((n) => ({ ...n, read: true })) })),
+      /* ---------------- Messenger extras ---------------- */
+      setKidSafe: (on) =>
+        set((s) => ({
+          safety: {
+            ...s.safety,
+            kidSafe: on,
+            controls: on ? bandDefaults(s.safety.ageBand) : s.safety.controls,
+          },
+        })),
+      updateSafety: (patch) =>
+        set((s) => ({
+          safety: {
+            ...s.safety,
+            ...patch,
+            controls: patch.ageBand
+              ? bandDefaults(patch.ageBand)
+              : s.safety.controls,
+          },
+        })),
+      setSafetyControl: (id, value) =>
+        set((s) => ({
+          safety: {
+            ...s.safety,
+            controls: { ...s.safety.controls, [id]: value },
+          },
+        })),
+      toggleGibberThread: (id) =>
+        set((s) => ({
+          gibberThreads: s.gibberThreads.includes(id)
+            ? s.gibberThreads.filter((t) => t !== id)
+            : [...s.gibberThreads, id],
+        })),
+      saveMessageItem: (item) => {
+        const created: SavedMessage = {
+          ...item,
+          id: uid("sv"),
+          at: new Date().toISOString(),
+        };
+        set((s) => ({ savedMessages: [created, ...s.savedMessages] }));
+        return created;
+      },
+      removeSavedMessage: (id) =>
+        set((s) => ({
+          savedMessages: s.savedMessages.filter((m) => m.id !== id),
+        })),
+      addThreadReply: (threadId, rootId, body, from, author) => {
+        const reply: ThreadReply = {
+          id: uid("rp"),
+          rootId,
+          from,
+          author,
+          body,
+          at: new Date().toISOString(),
+        };
+        set((s) => ({
+          messageThreads: {
+            ...s.messageThreads,
+            [rootId]: [...(s.messageThreads[rootId] ?? []), reply],
+          },
+          threads: s.threads.map((t) =>
+            t.id === threadId
+              ? { ...t, updatedAt: new Date().toISOString() }
+              : t,
+          ),
+        }));
+      },
+      addAssistantTurn: (threadId, turn) => {
+        const created: AssistantTurn = {
+          ...turn,
+          id: uid("as"),
+          at: new Date().toISOString(),
+        };
+        set((s) => ({
+          assistantChats: {
+            ...s.assistantChats,
+            [threadId]: [...(s.assistantChats[threadId] ?? []), created],
+          },
+        }));
+      },
+      clearAssistantChat: (threadId) =>
+        set((s) => ({
+          assistantChats: {
+            ...s.assistantChats,
+            [threadId]: [],
+          },
+        })),
+      reportMessage: (report) => {
+        const created: MessageReport = {
+          ...report,
+          id: uid("rp"),
+          at: new Date().toISOString(),
+          status: "received",
+        };
+        set((s) => ({ reports: [created, ...s.reports] }));
+      },
+      markFeedRead: (id) =>
+        set((s) => ({
+          feed: s.feed.map((f) => (f.id === id ? { ...f, read: true } : f)),
+        })),
+      markAllFeedRead: () =>
+        set((s) => ({ feed: s.feed.map((f) => ({ ...f, read: true })) })),
       resetWorkspace: () => set({ ...initialState }),
     }),
     {
