@@ -55,18 +55,13 @@ export function hasLegacyData(): boolean {
   }
 }
 
-export async function runLocalMigration(force = false): Promise<{ migrated: boolean; summary?: unknown }> {
-  if (typeof window === "undefined") return { migrated: false };
-  if (!force && window.localStorage.getItem(MIGRATION_MARKER)) return { migrated: false };
-  const raw = window.localStorage.getItem(LEGACY_KEY);
-  if (!raw) return { migrated: false };
+export function hasMigrated(): boolean {
+  if (typeof window === "undefined") return false;
+  return Boolean(window.localStorage.getItem(MIGRATION_MARKER));
+}
 
-  let parsed: { state?: Record<string, unknown> };
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return { migrated: false };
-  }
+/** Map a raw legacy Zustand persist payload into the server import contract. */
+export function buildImportPayload(parsed: { state?: Record<string, unknown> }) {
   const state = parsed.state ?? {};
   const threads = Array.isArray(state.threads) ? state.threads : [];
   const contacts = Array.isArray(state.contacts) ? state.contacts : [];
@@ -81,13 +76,40 @@ export async function runLocalMigration(force = false): Promise<{ migrated: bool
       }));
     }
   }
+  return { threads, contacts, workspace };
+}
 
-  const result = await migrationApi.importLocal({
-    threads: threads.map((t) => t),
-    contacts: contacts.map((c) => c),
-    workspace,
-    force,
-  });
+/** Import a legacy JSON file chosen by the user in Settings. */
+export async function importLegacyFile(
+  file: File,
+  force = false,
+): Promise<{ summary?: unknown; skipped?: boolean }> {
+  const text = await file.text();
+  let parsed: { state?: Record<string, unknown> };
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("The selected file is not valid JSON.");
+  }
+  const payload = buildImportPayload(parsed);
+  const result = await migrationApi.importLocal({ ...payload, force });
+  return result as { summary?: unknown; skipped?: boolean };
+}
+
+export async function runLocalMigration(force = false): Promise<{ migrated: boolean; summary?: unknown }> {
+  if (typeof window === "undefined") return { migrated: false };
+  if (!force && window.localStorage.getItem(MIGRATION_MARKER)) return { migrated: false };
+  const raw = window.localStorage.getItem(LEGACY_KEY);
+  if (!raw) return { migrated: false };
+
+  let parsed: { state?: Record<string, unknown> };
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { migrated: false };
+  }
+
+  const result = await migrationApi.importLocal({ ...buildImportPayload(parsed), force });
   window.localStorage.setItem(MIGRATION_MARKER, JSON.stringify({ at: new Date().toISOString() }));
   return { migrated: true, summary: (result as { summary?: unknown }).summary };
 }

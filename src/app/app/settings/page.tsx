@@ -26,7 +26,8 @@ import { Modal } from "@/components/ui/Modal";
 import { Avatar, Badge, Toggle } from "@/components/ui/primitives";
 import { useStore } from "@/store/useStore";
 import { useUI, useToast } from "@/store/useUI";
-import { cn, copyToClipboard, downloadFile, uid } from "@/lib/utils";
+import { cn, copyToClipboard, uid } from "@/lib/utils";
+import { DataMigrationPanel } from "@/components/settings/DataMigrationPanel";
 
 const INTEGRATIONS = [
   { id: "hubspot", name: "HubSpot CRM", desc: "Two-way contact and deal sync", icon: "🔗", connected: true },
@@ -94,12 +95,6 @@ export default function SettingsPage() {
     { id: "feeds", label: "RSS feeds", icon: Rss },
     { id: "data", label: "Data", icon: RefreshCw },
   ];
-
-  const exportData = () => {
-    const raw = localStorage.getItem("friendconnect-workspace-v1");
-    downloadFile("friendconnect-workspace.json", raw ?? "{}");
-    toast.success("Export ready", "Workspace JSON downloaded.");
-  };
 
   const createKey = () => {
     const key = `fc_live_${uid("k").replace(/[^a-z0-9]/gi, "")}`;
@@ -622,52 +617,35 @@ export default function SettingsPage() {
           {/* ---------------- Data ---------------- */}
           {tab === "data" && (
             <div className="space-y-4">
+              <DataMigrationPanel />
+
               <div className="fc-card p-6">
-                <h2 className="text-[17px] font-semibold">Your data</h2>
-                <p className="mt-1 text-[13px] text-[var(--fc-fg-muted)]">
-                  Everything lives in this browser. Export it, or wipe it.
+                <h3 className="flex items-center gap-2 text-[15px] font-semibold">
+                  <Shield className="size-4 text-rose-500" />
+                  Local demo reset
+                </h3>
+                <p className="mt-1 text-[12.5px] text-[var(--fc-fg-muted)]">
+                  Resets only the browser-side demo workspace and UI preferences. Messages,
+                  contacts, media and records already saved to your account are not affected.
                 </p>
-
-                <div className="mt-5 flex flex-wrap gap-2">
-                  <button onClick={exportData} className="btn btn-secondary btn-sm">
-                    <Download className="size-3.5" />
-                    Export workspace JSON
-                  </button>
-                  <button
-                    onClick={() => toast.info("Import", "Drop a workspace JSON onto the workspace to restore it.")}
-                    className="btn btn-secondary btn-sm"
-                  >
-                    Import
-                  </button>
-                </div>
-
-                <div className="mt-6 rounded-xl border border-rose-500/25 bg-rose-500/[0.05] p-4">
-                  <h3 className="flex items-center gap-2 text-[14px] font-semibold text-rose-600 dark:text-rose-400">
-                    <Shield className="size-4" />
-                    Reset workspace
-                  </h3>
-                  <p className="mt-1 text-[12.5px] text-[var(--fc-fg-muted)]">
-                    This restores every module to its seeded state: contacts, deals,
-                    students, applications, articles, posts, agents, notes and settings.
-                  </p>
-                  <button
-                    onClick={() => setResetModal(true)}
-                    className="btn btn-danger btn-sm mt-3"
-                  >
-                    <Trash2 className="size-3.5" />
-                    Reset to seed data
-                  </button>
-                </div>
+                <button
+                  onClick={() => setResetModal(true)}
+                  className="btn btn-danger btn-sm mt-3"
+                >
+                  <Trash2 className="size-3.5" />
+                  Reset local demo data
+                </button>
               </div>
 
               <div className="fc-card p-6">
                 <h3 className="text-[15px] font-semibold">Storage & privacy</h3>
                 <ul className="mt-3 space-y-2.5 text-[13px] leading-relaxed text-[var(--fc-fg-muted)]">
                   {[
-                    "No cookies, no tracking pixels, no third-party analytics.",
-                    "All workspace data is stored in localStorage on this device only.",
-                    "Exports are plain JSON you can read, diff and archive.",
-                    "Signing out clears the session; it never sends your data anywhere.",
+                    "Authoritative data lives in MySQL, never in browser localStorage.",
+                    "Local storage holds UI preferences, drafts and the one-time migration marker only.",
+                    "Media is private: downloads require an authenticated, authorized session.",
+                    "Server backups are plain JSON you can read, diff and archive.",
+                    "Sessions use opaque tokens in HttpOnly cookies; signing out revokes them server-side.",
                   ].map((r) => (
                     <li key={r} className="flex items-start gap-2.5">
                       <span className="mt-2 size-1.5 shrink-0 rounded-full bg-[var(--color-accent-500)]" />
@@ -684,8 +662,8 @@ export default function SettingsPage() {
       <Modal
         open={resetModal}
         onClose={() => setResetModal(false)}
-        title="Reset the workspace?"
-        description="Every module returns to its seeded state. This cannot be undone."
+        title="Reset local demo data?"
+        description="Only browser-side demo data and UI preferences are reset. Server data is untouched."
         size="sm"
         footer={
           <>
@@ -707,9 +685,9 @@ export default function SettingsPage() {
         }
       >
         <p className="text-[13.5px] leading-relaxed text-[var(--fc-fg-muted)]">
-          You will lose any contact, deal, student, application, article, post, agent
-          run, note, diagram, video project and voice clip you created. Export first
-          if you want to keep them.
+          This clears the local demo workspace in this browser only. Messages, contacts
+          and files already persisted to your FriendConnect account remain available on
+          every device.
         </p>
       </Modal>
     </div>

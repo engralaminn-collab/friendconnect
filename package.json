@@ -17,7 +17,8 @@
     "db:seed": "tsx --env-file=.env scripts/seed.ts",
     "db:cleanup-media": "tsx --env-file=.env scripts/cleanup-media.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:types": "tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1156.0",
