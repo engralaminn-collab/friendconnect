@@ -1,0 +1,55 @@
+# FriendConnect — CI/CD Pipeline
+# Required GitHub Secrets for deployment:
+#   DEPLOY_HOST     — production server IP
+#   DEPLOY_USER     — deployment user (aloedu)
+#   DEPLOY_SSH_KEY  — SSH private key for the deployment user
+#   DEPLOY_PATH     — app path on server (e.g. /home/aloedu/friendconnect)
+
+name: FriendConnect CI/CD
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  # ---- Lint + Typecheck + Build ----
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Lint
+        run: bun run lint
+      - name: Typecheck
+        run: bunx tsc --noEmit
+      - name: Build
+        run: bun run build
+      - name: Generate Prisma Client
+        run: bun run db:generate
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build
+          path: .next/standalone
+
+  # ---- Deploy to production (only on main branch) ----
+  deploy:
+    needs: quality
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd ${{ secrets.DEPLOY_PATH }}
+            git pull origin main
+            ./scripts/deploy.sh

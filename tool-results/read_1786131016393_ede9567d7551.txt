@@ -1,0 +1,751 @@
+     1→'use client'
+     2→
+     3→import { useEffect, useRef, useState } from 'react'
+     4→import { useAuth, AuthUser } from '@/hooks/use-auth'
+     5→import { useApp } from '@/lib/store'
+     6→import { useSocket } from '@/hooks/use-socket'
+     7→import { api, lastSeenText, formatLastSeenPrecise, uploadFile } from '@/lib/api'
+     8→import { UserAvatar, EmptyState } from '@/components/fc/ui'
+     9→import { Card } from '@/components/ui/card'
+    10→import { Input } from '@/components/ui/input'
+    11→import { Textarea } from '@/components/ui/textarea'
+    12→import { Button } from '@/components/ui/button'
+    13→import { Label } from '@/components/ui/label'
+    14→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    15→import { Slider } from '@/components/ui/slider'
+    16→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
+    17→import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+    18→import { Camera, MapPin, Phone, Cake, GraduationCap, Briefcase, Pencil, MessageCircle, PhoneCall, Video, UserPlus, Check, Ban, ShieldOff, ArrowLeft, Lock, Sparkles, Loader2, Crop, X } from 'lucide-react'
+    19→import { toast } from 'sonner'
+    20→import { cn } from '@/lib/utils'
+    21→
+    22→interface ProfileResult {
+    23→  user: { id: string; username: string; name: string; photoUrl: string | null; photoFilter: string | null; bio: string | null; phone: string | null; location: string | null; birthday: string | null; education: string | null; work: string | null; lastSeen?: string | null }
+    24→  relation: { isFriend: boolean; isBlocked: boolean; blockedByMe: boolean; status: string; incomingRequest: boolean; outgoingRequest: boolean }
+    25→  canMessage: boolean
+    26→  canCall: boolean
+    27→}
+    28→
+    29→export function ProfileView() {
+    30→  const { user, refresh } = useAuth()
+    31→  const { activeProfileId, setView, openChat } = useApp()
+    32→  const { isOnline } = useSocket()
+    33→  const [profile, setProfile] = useState<ProfileResult | null>(null)
+    34→  const [loading, setLoading] = useState(true)
+    35→  const [editOpen, setEditOpen] = useState(false)
+    36→  const [actionLoading, setActionLoading] = useState(false)
+    37→
+    38→  const isMe = !activeProfileId || activeProfileId === user?.id
+    39→  const targetId = isMe ? user!.id : activeProfileId!
+    40→
+    41→  useEffect(() => {
+    42→    if (isMe) {
+    43→      setProfile(null)
+    44→      setLoading(false)
+    45→      return
+    46→    }
+    47→    setLoading(true)
+    48→    api<ProfileResult>(`/api/users/${targetId}`)
+    49→      .then(setProfile)
+    50→      .catch(() => toast.error('Could not load profile'))
+    51→      .finally(() => setLoading(false))
+    52→  }, [targetId, isMe])
+    53→
+    54→  if (isMe) {
+    55→    return <MyProfile />
+    56→  }
+    57→
+    58→  if (loading) {
+    59→    return <div className="flex h-full items-center justify-center"><div className="fc-pulse text-muted-foreground">Loading…</div></div>
+    60→  }
+    61→  if (!profile) {
+    62→    return <EmptyState title="Profile not found" description="This user may not exist anymore." action={<Button onClick={() => setView('friends')}>Back to friends</Button>} />
+    63→  }
+    64→
+    65→  const u = profile.user
+    66→  const online = isOnline(u.id)
+    67→
+    68→  const act = async (action: string, msg: string) => {
+    69→    setActionLoading(true)
+    70→    try {
+    71→      await api('/api/friends', { method: 'POST', body: JSON.stringify({ action, targetId: u.id }) })
+    72→      toast.success(msg)
+    73→      const p = await api<ProfileResult>(`/api/users/${u.id}`)
+    74→      setProfile(p)
+    75→    } catch (e: any) {
+    76→      toast.error(e.message || 'Failed')
+    77→    } finally {
+    78→      setActionLoading(false)
+    79→    }
+    80→  }
+    81→
+    82→  return (
+    83→    <div className="fc-scroll h-full overflow-y-auto pb-6">
+    84→      <div className="flex items-center gap-2 px-2 py-2">
+    85→        <button onClick={() => setView('friends')} className="grid h-9 w-9 place-items-center rounded-full hover:bg-accent"><ArrowLeft size={18} /></button>
+    86→        <span className="text-sm font-medium">Profile</span>
+    87→      </div>
+    88→
+    89→      {/* Header */}
+    90→      <div className="relative px-4 pb-4">
+    91→        <div className="h-24 rounded-b-3xl bg-gradient-to-br from-primary/40 via-primary/20 to-accent" />
+    92→        <div className="-mt-12 flex items-end gap-4">
+    93→          <UserAvatar name={u.name} src={u.photoUrl} size={96} online={online} filter={u.photoFilter} className="border-4 border-background" />
+    94→          <div className="pb-1">
+    95→            <h1 className="text-xl font-bold">{u.name}</h1>
+    96→            <p className="text-sm text-muted-foreground">@{u.username}</p>
+    97→            <p
+    98→              className={online ? 'text-xs font-medium text-primary' : 'text-xs text-muted-foreground'}
+    99→              title={!online ? formatLastSeenPrecise(u.lastSeen).detail : undefined}
+   100→            >
+   101→              {lastSeenText(online, u.lastSeen)}
+   102→            </p>
+   103→          </div>
+   104→        </div>
+   105→      </div>
+   106→
+   107→      {/* Actions */}
+   108→      <div className="flex gap-2 px-4">
+   109→        {profile.relation.isFriend ? (
+   110→          <>
+   111→            <Button className="flex-1 rounded-xl" onClick={() => openChat(u.id)}><MessageCircle size={16} className="mr-1" />Message</Button>
+   112→            <Button variant="secondary" className="rounded-xl" onClick={() => startCall(u.id, 'audio')}><PhoneCall size={16} /></Button>
+   113→            <Button variant="secondary" className="rounded-xl" onClick={() => startCall(u.id, 'video')}><Video size={16} /></Button>
+   114→          </>
+   115→        ) : profile.relation.outgoingRequest ? (
+   116→          <Button variant="secondary" className="flex-1 rounded-xl" disabled>Request sent</Button>
+   117→        ) : profile.relation.incomingRequest ? (
+   118→          <Button className="flex-1 rounded-xl" disabled={actionLoading} onClick={() => act('accept', 'You are now friends!')}>Accept request</Button>
+   119→        ) : profile.relation.blockedByMe ? (
+   120→          <Button variant="secondary" className="flex-1 rounded-xl" disabled={actionLoading} onClick={() => act('unblock', 'User unblocked')}>Unblock</Button>
+   121→        ) : (
+   122→          <Button className="flex-1 rounded-xl" disabled={actionLoading} onClick={() => act('request', 'Friend request sent')}><UserPlus size={16} className="mr-1" />Add friend</Button>
+   123→        )}
+   124→      </div>
+   125→
+   126→      {/* Bio */}
+   127→      {u.bio && (
+   128→        <Card className="mx-4 mt-4 border-border p-4 shadow-none">
+   129→          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">About</h3>
+   130→          <p className="text-sm leading-relaxed">{u.bio}</p>
+   131→        </Card>
+   132→      )}
+   133→
+   134→      {/* Details */}
+   135→      <Card className="mx-4 mt-3 border-border p-2 shadow-none">
+   136→        {u.location && <Detail icon={MapPin} label="Location" value={u.location} />}
+   137→        {u.phone && <Detail icon={Phone} label="Phone" value={u.phone} />}
+   138→        {u.birthday && <Detail icon={Cake} label="Birthday" value={u.birthday} />}
+   139→        {u.education && <Detail icon={GraduationCap} label="Education" value={u.education} />}
+   140→        {u.work && <Detail icon={Briefcase} label="Work" value={u.work} />}
+   141→        {!u.location && !u.phone && !u.birthday && !u.education && !u.work && (
+   142→          <p className="px-3 py-4 text-center text-sm text-muted-foreground">No additional details shared.</p>
+   143→        )}
+   144→      </Card>
+   145→
+   146→      {!profile.relation.isFriend && !profile.relation.blockedByMe && (
+   147→        <div className="mt-4 px-4">
+   148→          <Button variant="ghost" className="w-full rounded-xl text-destructive hover:bg-destructive/10" disabled={actionLoading} onClick={() => act('block', 'User blocked')}><Ban size={16} className="mr-1" />Block user</Button>
+   149→        </div>
+   150→      )}
+   151→    </div>
+   152→  )
+   153→
+   154→  function startCall(id: string, type: 'audio' | 'video') {
+   155→    // dispatch a custom event the CallOverlay listens to
+   156→    window.dispatchEvent(new CustomEvent('fc:start-call', { detail: { targetUserId: id, type } }))
+   157→  }
+   158→}
+   159→
+   160→function Detail({ icon: Icon, label, value }: { icon: typeof MapPin; label: string; value: string }) {
+   161→  return (
+   162→    <div className="flex items-center gap-3 rounded-lg px-3 py-2.5">
+   163→      <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary"><Icon size={16} /></div>
+   164→      <div className="min-w-0">
+   165→        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+   166→        <div className="truncate text-sm font-medium">{value}</div>
+   167→      </div>
+   168→    </div>
+   169→  )
+   170→}
+   171→
+   172→function MyProfile() {
+   173→  const { user, refresh } = useAuth()
+   174→  const { setView } = useApp()
+   175→  const { isOnline } = useSocket()
+   176→  const [open, setOpen] = useState(false)
+   177→  // Round 9: data URL of the image the user just picked from the camera
+   178→  // button. When set, the PhotoCropDialog opens so the user can crop a
+   179→  // square region before uploading (ensures every avatar is square).
+   180→  const [cropSrc, setCropSrc] = useState<string | null>(null)
+   181→  if (!user) return null
+   182→  const p = user.profile
+   183→  const meOnline = isOnline(user.id)
+   184→  const lastActive = meOnline
+   185→    ? { label: 'online', detail: 'active now' }
+   186→    : formatLastSeenPrecise(p?.lastSeen)
+   187→
+   188→  const fields: { k: string; label: string; value: string }[] = [
+   189→    { k: 'bio', label: 'Bio', value: p?.bio || '' },
+   190→    { k: 'phone', label: 'Phone', value: p?.phone || '' },
+   191→    { k: 'location', label: 'Location', value: p?.location || '' },
+   192→    { k: 'birthday', label: 'Birthday', value: p?.birthday || '' },
+   193→    { k: 'education', label: 'Education', value: p?.education || '' },
+   194→    { k: 'work', label: 'Work', value: p?.work || '' },
+   195→  ]
+   196→
+   197→  return (
+   198→    <div className="fc-scroll h-full overflow-y-auto pb-6">
+   199→      <div className="relative px-4 pb-4">
+   200→        <div className="h-24 rounded-b-3xl bg-gradient-to-br from-primary/40 via-primary/20 to-accent" />
+   201→        <div className="-mt-12 flex items-end gap-4">
+   202→          <div className="relative">
+   203→            <UserAvatar name={user.name} src={p?.photoUrl} size={96} filter={p?.photoFilter} className="border-4 border-background" />
+   204→            <div className="absolute bottom-1 right-1 flex items-center gap-1">
+   205→              <PhotoFilterPicker user={user} refresh={refresh} />
+   206→              <label className="grid h-8 w-8 cursor-pointer place-items-center rounded-full bg-primary text-primary-foreground shadow-lg">
+   207→                <Camera size={14} />
+   208→                <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+   209→                  const f = e.target.files?.[0]
+   210→                  if (f) {
+   211→                    const reader = new FileReader()
+   212→                    reader.onload = () => setCropSrc(reader.result as string)
+   213→                    reader.onerror = () => toast.error('Could not read image')
+   214→                    reader.readAsDataURL(f)
+   215→                  }
+   216→                  // Always reset so the same file can be re-selected later.
+   217→                  e.target.value = ''
+   218→                }} />
+   219→              </label>
+   220→            </div>
+   221→          </div>
+   222→          <div className="pb-1">
+   223→            <h1 className="text-xl font-bold">{user.name}</h1>
+   224→            <p className="text-sm text-muted-foreground">@{user.username}</p>
+   225→            <p className="text-xs text-muted-foreground">{user.email}</p>
+   226→            {lastActive.label !== 'offline' && (
+   227→              <p
+   228→                className="text-[10px] text-muted-foreground"
+   229→                title={lastActive.detail}
+   230→              >
+   231→                {lastActive.label === 'online' ? 'Active now' : lastActive.detail}
+   232→              </p>
+   233→            )}
+   234→          </div>
+   235→        </div>
+   236→      </div>
+   237→
+   238→      <div className="px-4">
+   239→        <Button className="w-full rounded-xl" onClick={() => setOpen(true)}><Pencil size={16} className="mr-1" />Edit profile</Button>
+   240→      </div>
+   241→
+   242→      {p?.bio && (
+   243→        <Card className="mx-4 mt-4 border-border p-4 shadow-none">
+   244→          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">About</h3>
+   245→          <p className="text-sm leading-relaxed">{p.bio}</p>
+   246→        </Card>
+   247→      )}
+   248→
+   249→      <Card className="mx-4 mt-3 border-border p-2 shadow-none">
+   250→        {fields.map((f) => f.value ? <Detail key={f.k} icon={iconFor(f.k)} label={f.label} value={f.value} /> : null)}
+   251→        {fields.every((f) => !f.value) && <p className="px-3 py-4 text-center text-sm text-muted-foreground">No details yet. Tap “Edit profile”.</p>}
+   252→      </Card>
+   253→
+   254→      <Card className="mx-4 mt-3 border-border p-4 shadow-none">
+   255→        <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"><Lock size={12} />Privacy</h3>
+   256→        <div className="space-y-2 text-sm">
+   257→          <PrivacyRow label="Profile visibility" value={p?.profileVisibility || 'PUBLIC'} />
+   258→          <PrivacyRow label="Who can message" value={p?.messagePermission || 'FRIENDS'} />
+   259→          <PrivacyRow label="Who can call" value={p?.callPermission || 'FRIENDS'} />
+   260→        </div>
+   261→      </Card>
+   262→
+   263→      <EditProfileDialog open={open} onOpenChange={setOpen} />
+   264→
+   265→      {cropSrc && (
+   266→        <PhotoCropDialog src={cropSrc} onClose={() => setCropSrc(null)} refresh={refresh} />
+   267→      )}
+   268→    </div>
+   269→  )
+   270→}
+   271→
+   272→function iconFor(k: string) {
+   273→  switch (k) {
+   274→    case 'phone': return Phone
+   275→    case 'location': return MapPin
+   276→    case 'birthday': return Cake
+   277→    case 'education': return GraduationCap
+   278→    case 'work': return Briefcase
+   279→    default: return Pencil
+   280→  }
+   281→}
+   282→
+   283→function PrivacyRow({ label, value }: { label: string; value: string }) {
+   284→  return (
+   285→    <div className="flex items-center justify-between">
+   286→      <span className="text-muted-foreground">{label}</span>
+   287→      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{value}</span>
+   288→    </div>
+   289→  )
+   290→}
+   291→
+   292→function EditProfileDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b: boolean) => void }) {
+   293→  const { user, refresh } = useAuth()
+   294→  const [form, setForm] = useState<Record<string, string>>({})
+   295→  const [saving, setSaving] = useState(false)
+   296→
+   297→  useEffect(() => {
+   298→    if (open && user) {
+   299→      setForm({
+   300→        name: user.name,
+   301→        username: user.username,
+   302→        bio: user.profile?.bio || '',
+   303→        phone: user.profile?.phone || '',
+   304→        location: user.profile?.location || '',
+   305→        birthday: user.profile?.birthday || '',
+   306→        education: user.profile?.education || '',
+   307→        work: user.profile?.work || '',
+   308→        profileVisibility: user.profile?.profileVisibility || 'PUBLIC',
+   309→        messagePermission: user.profile?.messagePermission || 'FRIENDS',
+   310→        callPermission: user.profile?.callPermission || 'FRIENDS',
+   311→      })
+   312→    }
+   313→  }, [open, user])
+   314→
+   315→  const submit = async () => {
+   316→    setSaving(true)
+   317→    try {
+   318→      await api('/api/users/me', { method: 'PUT', body: JSON.stringify(form) })
+   319→      await refresh()
+   320→      toast.success('Profile updated')
+   321→      onOpenChange(false)
+   322→    } catch (e: any) {
+   323→      toast.error(e.message || 'Failed')
+   324→    } finally {
+   325→      setSaving(false)
+   326→    }
+   327→  }
+   328→
+   329→  if (!user) return null
+   330→  return (
+   331→    <Dialog open={open} onOpenChange={onOpenChange}>
+   332→      <DialogContent className="fc-scroll max-h-[85vh] max-w-md overflow-y-auto">
+   333→        <DialogHeader>
+   334→          <DialogTitle>Edit profile</DialogTitle>
+   335→        </DialogHeader>
+   336→        <div className="grid gap-3">
+   337→          <div className="grid grid-cols-2 gap-2">
+   338→            <div className="space-y-1.5"><Label>Name</Label><Input value={form.name || ''} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></div>
+   339→            <div className="space-y-1.5"><Label>Username</Label><Input value={form.username || ''} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} /></div>
+   340→          </div>
+   341→          <div className="space-y-1.5"><Label>Bio</Label><Textarea rows={2} value={form.bio || ''} onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))} /></div>
+   342→          <div className="grid grid-cols-2 gap-2">
+   343→            <div className="space-y-1.5"><Label>Phone</Label><Input value={form.phone || ''} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
+   344→            <div className="space-y-1.5"><Label>Location</Label><Input value={form.location || ''} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} /></div>
+   345→          </div>
+   346→          <div className="grid grid-cols-2 gap-2">
+   347→            <div className="space-y-1.5"><Label>Birthday</Label><Input placeholder="YYYY-MM-DD" value={form.birthday || ''} onChange={(e) => setForm((f) => ({ ...f, birthday: e.target.value }))} /></div>
+   348→            <div className="space-y-1.5"><Label>Education</Label><Input value={form.education || ''} onChange={(e) => setForm((f) => ({ ...f, education: e.target.value }))} /></div>
+   349→          </div>
+   350→          <div className="space-y-1.5"><Label>Work</Label><Input value={form.work || ''} onChange={(e) => setForm((f) => ({ ...f, work: e.target.value }))} /></div>
+   351→          <div className="rounded-xl border border-border p-3">
+   352→            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Privacy</h4>
+   353→            <div className="grid gap-2">
+   354→              <SelectField label="Profile visibility" value={form.profileVisibility || 'PUBLIC'} onChange={(v) => setForm((f) => ({ ...f, profileVisibility: v }))} options={['PUBLIC', 'FRIENDS', 'PRIVATE']} />
+   355→              <SelectField label="Who can message" value={form.messagePermission || 'FRIENDS'} onChange={(v) => setForm((f) => ({ ...f, messagePermission: v }))} options={['PUBLIC', 'FRIENDS']} />
+   356→              <SelectField label="Who can call" value={form.callPermission || 'FRIENDS'} onChange={(v) => setForm((f) => ({ ...f, callPermission: v }))} options={['PUBLIC', 'FRIENDS']} />
+   357→            </div>
+   358→          </div>
+   359→          <Button disabled={saving} onClick={submit} className="rounded-xl">{saving ? 'Saving…' : 'Save changes'}</Button>
+   360→        </div>
+   361→      </DialogContent>
+   362→    </Dialog>
+   363→  )
+   364→}
+   365→
+   366→function SelectField({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: string[] }) {
+   367→  return (
+   368→    <div className="flex items-center justify-between">
+   369→      <Label className="text-sm">{label}</Label>
+   370→      <Select value={value} onValueChange={onChange}>
+   371→        <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+   372→        <SelectContent>
+   373→          {options.map((o) => <SelectItem key={o} value={o}>{o.charAt(0) + o.slice(1).toLowerCase()}</SelectItem>)}
+   374→        </SelectContent>
+   375→      </Select>
+   376→    </div>
+   377→  )
+   378→}
+   379→
+   380→/**
+   381→ * Preset photo filters for the profile avatar picker.
+   382→ * `value` is the CSS filter value sent to the backend (stored on Profile.photoFilter).
+   383→ * "none" is the special sentinel meaning "clear the filter".
+   384→ */
+   385→const PHOTO_FILTERS: { id: string; name: string; value: string }[] = [
+   386→  { id: 'none', name: 'None', value: 'none' },
+   387→  { id: 'grayscale', name: 'Grayscale', value: 'grayscale(1)' },
+   388→  { id: 'sepia', name: 'Sepia', value: 'sepia(0.6)' },
+   389→  { id: 'saturate', name: 'Saturate', value: 'saturate(1.5)' },
+   390→  { id: 'contrast', name: 'Contrast', value: 'contrast(1.2)' },
+   391→  { id: 'brightness', name: 'Bright', value: 'brightness(1.1)' },
+   392→  { id: 'vintage', name: 'Vintage', value: 'sepia(0.5) contrast(1.1) brightness(0.95) saturate(1.2)' },
+   393→  { id: 'cool', name: 'Cool', value: 'hue-rotate(30deg)' },
+   394→  { id: 'warm', name: 'Warm', value: 'hue-rotate(-30deg)' },
+   395→]
+   396→
+   397→function PhotoFilterPicker({
+   398→  user,
+   399→  refresh,
+   400→}: {
+   401→  user: AuthUser
+   402→  refresh: () => Promise<AuthUser | null>
+   403→}) {
+   404→  const [open, setOpen] = useState(false)
+   405→  const [applying, setApplying] = useState<string | null>(null)
+   406→  const profile = user.profile
+   407→  const current = profile?.photoFilter || 'none'
+   408→
+   409→  const apply = async (value: string) => {
+   410→    if (applying) return
+   411→    setApplying(value)
+   412→    try {
+   413→      // Backend treats empty string as null (clears the filter).
+   414→      const body = value === 'none' ? { photoFilter: '' } : { photoFilter: value }
+   415→      await api('/api/users/me', { method: 'PUT', body: JSON.stringify(body) })
+   416→      await refresh()
+   417→      toast.success('Photo filter updated')
+   418→      setOpen(false)
+   419→    } catch (e: any) {
+   420→      toast.error(e.message || 'Failed to update filter')
+   421→    } finally {
+   422→      setApplying(null)
+   423→    }
+   424→  }
+   425→
+   426→  return (
+   427→    <Popover open={open} onOpenChange={setOpen}>
+   428→      <PopoverTrigger asChild>
+   429→        <button
+   430→          type="button"
+   431→          className="grid h-8 w-8 place-items-center rounded-full bg-primary/15 text-primary shadow-sm transition hover:bg-primary/25"
+   432→          aria-label="Photo filters"
+   433→          title="Photo filters"
+   434→        >
+   435→          <Sparkles size={14} />
+   436→        </button>
+   437→      </PopoverTrigger>
+   438→      <PopoverContent className="w-72 p-3" align="end" sideOffset={8}>
+   439→        <div className="mb-2 flex items-center gap-1.5">
+   440→          <Sparkles size={14} className="text-primary" />
+   441→          <span className="text-sm font-semibold">Photo filter</span>
+   442→        </div>
+   443→        <div className="grid grid-cols-3 gap-2">
+   444→          {PHOTO_FILTERS.map((f) => {
+   445→            const selected = current === f.value
+   446→            const isApplying = applying === f.value
+   447→            return (
+   448→              <button
+   449→                key={f.id}
+   450→                type="button"
+   451→                onClick={() => apply(f.value)}
+   452→                disabled={!!applying}
+   453→                className={cn(
+   454→                  'relative flex flex-col items-center gap-1 rounded-xl p-2 transition hover:bg-accent',
+   455→                  selected && 'ring-2 ring-primary'
+   456→                )}
+   457→              >
+   458→                <UserAvatar
+   459→                  name={user.name}
+   460→                  src={profile?.photoUrl}
+   461→                  size={48}
+   462→                  filter={f.value === 'none' ? undefined : f.value}
+   463→                />
+   464→                <span className="text-[10px] font-medium text-muted-foreground">{f.name}</span>
+   465→                {isApplying && (
+   466→                  <span className="absolute inset-0 grid place-items-center rounded-xl bg-background/60">
+   467→                    <Loader2 size={14} className="animate-spin text-primary" />
+   468→                  </span>
+   469→                )}
+   470→                {selected && <span className="sr-only">Selected</span>}
+   471→              </button>
+   472→            )
+   473→          })}
+   474→        </div>
+   475→      </PopoverContent>
+   476→    </Popover>
+   477→  )
+   478→}
+   479→
+   480→/**
+   481→ * Round 9: PhotoCropDialog — replaces the old "upload immediately" flow with
+   482→ * a client-side crop step. The parent picks an image and hands us its data
+   483→ * URL; we render it in a square viewport with a dark mask outside the crop
+   484→ * region, a 1×–3× zoom slider, and drag-to-pan. On Apply we draw the visible
+   485→ * square region to a 256×256 canvas, convert it to a JPEG Blob, upload it
+   486→ * via `uploadFile`, PUT the new URL to /api/users/me, and refresh the
+   487→ * session. The crop step is mandatory (no skip) so every avatar is square.
+   488→ */
+   489→const CROP_CONTAINER_SIZE = 280
+   490→const CROP_OUTPUT_SIZE = 256
+   491→
+   492→function PhotoCropDialog({
+   493→  src,
+   494→  onClose,
+   495→  refresh,
+   496→}: {
+   497→  src: string
+   498→  onClose: () => void
+   499→  refresh: () => Promise<AuthUser | null>
+   500→}) {
+   501→  const imgRef = useRef<HTMLImageElement | null>(null)
+   502→  const [loaded, setLoaded] = useState(false)
+   503→  const [imgSize, setImgSize] = useState<{ nw: number; nh: number } | null>(null)
+   504→  const [zoom, setZoom] = useState(1) // 1.0 – 3.0
+   505→  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+   506→  const [applying, setApplying] = useState(false)
+   507→  // Pointer-drag state. Stored in a ref so move/up handlers can read the
+   508→  // latest values without re-creating the handlers each render.
+   509→  const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null)
+   510→
+   511→  // Reset transient state when a new image is handed in.
+   512→  useEffect(() => {
+   513→    setLoaded(false)
+   514→    setImgSize(null)
+   515→    setZoom(1)
+   516→    setPan({ x: 0, y: 0 })
+   517→  }, [src])
+   518→
+   519→  const onImgLoad = () => {
+   520→    const img = imgRef.current
+   521→    if (!img) return
+   522→    setImgSize({ nw: img.naturalWidth, nh: img.naturalHeight })
+   523→    setLoaded(true)
+   524→  }
+   525→  const onImgError = () => {
+   526→    toast.error('Could not load image')
+   527→    onClose()
+   528→  }
+   529→
+   530→  // fillScale = the scale at which the image just fills the container in its
+   531→  // smaller dimension (object-cover semantics). At zoom=1 the visible region
+   532→  // is the centered square of size min(nw,nh) in natural coords.
+   533→  const fillScale = imgSize
+   534→    ? CROP_CONTAINER_SIZE / Math.min(imgSize.nw, imgSize.nh)
+   535→    : 1
+   536→  const effScale = fillScale * zoom
+   537→  const scaledW = imgSize ? imgSize.nw * effScale : 0
+   538→  const scaledH = imgSize ? imgSize.nh * effScale : 0
+   539→  const maxPanX = Math.max(0, (scaledW - CROP_CONTAINER_SIZE) / 2)
+   540→  const maxPanY = Math.max(0, (scaledH - CROP_CONTAINER_SIZE) / 2)
+   541→  const clampPan = (p: { x: number; y: number }) => ({
+   542→    x: Math.max(-maxPanX, Math.min(maxPanX, p.x)),
+   543→    y: Math.max(-maxPanY, Math.min(maxPanY, p.y)),
+   544→  })
+   545→  const clampedPan = clampPan(pan)
+   546→
+   547→  const onPointerDown = (e: React.PointerEvent) => {
+   548→    if (!loaded) return
+   549→    e.currentTarget.setPointerCapture(e.pointerId)
+   550→    dragRef.current = {
+   551→      startX: e.clientX,
+   552→      startY: e.clientY,
+   553→      // Start from the currently-displayed (clamped) position so consecutive
+   554→      // drags don't accumulate out-of-bounds offsets.
+   555→      panX: clampedPan.x,
+   556→      panY: clampedPan.y,
+   557→    }
+   558→  }
+   559→  const onPointerMove = (e: React.PointerEvent) => {
+   560→    if (!dragRef.current) return
+   561→    const dx = e.clientX - dragRef.current.startX
+   562→    const dy = e.clientY - dragRef.current.startY
+   563→    setPan(clampPan({ x: dragRef.current.panX + dx, y: dragRef.current.panY + dy }))
+   564→  }
+   565→  const onPointerUp = (e: React.PointerEvent) => {
+   566→    dragRef.current = null
+   567→    try {
+   568→      e.currentTarget.releasePointerCapture(e.pointerId)
+   569→    } catch {
+   570→      /* ignore — pointer may already be released */
+   571→    }
+   572→  }
+   573→
+   574→  const onZoomChange = (v: number[]) => {
+   575→    const newZoom = v[0] / 100
+   576→    setZoom(newZoom)
+   577→    // Re-clamp pan for the new zoom level so the image never reveals empty
+   578→    // space outside its bounds.
+   579→    const newEffScale = fillScale * newZoom
+   580→    const newScaledW = imgSize ? imgSize.nw * newEffScale : 0
+   581→    const newScaledH = imgSize ? imgSize.nh * newEffScale : 0
+   582→    const newMaxPanX = Math.max(0, (newScaledW - CROP_CONTAINER_SIZE) / 2)
+   583→    const newMaxPanY = Math.max(0, (newScaledH - CROP_CONTAINER_SIZE) / 2)
+   584→    setPan((p) => ({
+   585→      x: Math.max(-newMaxPanX, Math.min(newMaxPanX, p.x)),
+   586→      y: Math.max(-newMaxPanY, Math.min(newMaxPanY, p.y)),
+   587→    }))
+   588→  }
+   589→
+   590→  // Draw the visible square region to a 256×256 canvas and return a JPEG Blob.
+   591→  const cropToBlob = (): Promise<Blob | null> => {
+   592→    return new Promise((resolve) => {
+   593→      const img = imgRef.current
+   594→      if (!img || !imgSize) {
+   595→        resolve(null)
+   596→        return
+   597→      }
+   598→      // Visible region in displayed-image coords (after transform):
+   599→      //   visX = (scaledW - C) / 2 - pan.x
+   600→      //   visY = (scaledH - C) / 2 - pan.y
+   601→      // Convert to natural coords by dividing by effScale.
+   602→      const sx = ((scaledW - CROP_CONTAINER_SIZE) / 2 - clampedPan.x) / effScale
+   603→      const sy = ((scaledH - CROP_CONTAINER_SIZE) / 2 - clampedPan.y) / effScale
+   604→      const sSize = CROP_CONTAINER_SIZE / effScale
+   605→      const canvas = document.createElement('canvas')
+   606→      canvas.width = CROP_OUTPUT_SIZE
+   607→      canvas.height = CROP_OUTPUT_SIZE
+   608→      const ctx = canvas.getContext('2d')
+   609→      if (!ctx) {
+   610→        resolve(null)
+   611→        return
+   612→      }
+   613→      // White background in case the source has transparency.
+   614→      ctx.fillStyle = '#ffffff'
+   615→      ctx.fillRect(0, 0, CROP_OUTPUT_SIZE, CROP_OUTPUT_SIZE)
+   616→      ctx.drawImage(img, sx, sy, sSize, sSize, 0, 0, CROP_OUTPUT_SIZE, CROP_OUTPUT_SIZE)
+   617→      canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92)
+   618→    })
+   619→  }
+   620→
+   621→  const apply = async () => {
+   622→    if (applying) return
+   623→    setApplying(true)
+   624→    try {
+   625→      const blob = await cropToBlob()
+   626→      if (!blob) throw new Error('Could not crop image')
+   627→      const file = new File([blob], 'avatar.jpg', { type: 'image/jpeg' })
+   628→      const { file: uploaded } = await uploadFile(file)
+   629→      await api('/api/users/me', {
+   630→        method: 'PUT',
+   631→        body: JSON.stringify({ photoUrl: uploaded.url }),
+   632→      })
+   633→      await refresh()
+   634→      toast.success('Photo updated')
+   635→      onClose()
+   636→    } catch (e: any) {
+   637→      toast.error(e?.message || 'Failed to update photo')
+   638→    } finally {
+   639→      setApplying(false)
+   640→    }
+   641→  }
+   642→
+   643→  return (
+   644→    <Dialog open onOpenChange={(o) => !o && onClose()}>
+   645→      <DialogContent className="max-w-md gap-0 p-0">
+   646→        <DialogHeader className="border-b border-border px-4 py-3">
+   647→          <DialogTitle className="flex items-center gap-2 text-base">
+   648→            <Crop size={16} className="text-primary" />
+   649→            Crop photo
+   650→          </DialogTitle>
+   651→        </DialogHeader>
+   652→        <div className="p-4">
+   653→          <div
+   654→            className="relative mx-auto grid touch-none select-none place-items-center overflow-hidden rounded-xl bg-zinc-900"
+   655→            style={{ width: CROP_CONTAINER_SIZE, height: CROP_CONTAINER_SIZE }}
+   656→            onPointerDown={onPointerDown}
+   657→            onPointerMove={onPointerMove}
+   658→            onPointerUp={onPointerUp}
+   659→            onPointerCancel={onPointerUp}
+   660→          >
+   661→            {src && (
+   662→              <img
+   663→                ref={imgRef}
+   664→                src={src}
+   665→                alt="Crop preview"
+   666→                onLoad={onImgLoad}
+   667→                onError={onImgError}
+   668→                draggable={false}
+   669→                className="pointer-events-none max-w-none select-none"
+   670→                style={{
+   671→                  width: imgSize ? imgSize.nw * fillScale : 'auto',
+   672→                  height: imgSize ? imgSize.nh * fillScale : 'auto',
+   673→                  transform: `translate(${clampedPan.x}px, ${clampedPan.y}px) scale(${zoom})`,
+   674→                  transformOrigin: 'center center',
+   675→                  opacity: loaded ? 1 : 0,
+   676→                }}
+   677→              />
+   678→            )}
+   679→            {/* Crop overlay: square white border + dark shadow outside the
+   680→                crop region. Pointer events disabled so the underlying image
+   681→                receives the drag. */}
+   682→            <div className="pointer-events-none absolute inset-0">
+   683→              <div
+   684→                className="absolute"
+   685→                style={{
+   686→                  left: '50%',
+   687→                  top: '50%',
+   688→                  width: CROP_CONTAINER_SIZE,
+   689→                  height: CROP_CONTAINER_SIZE,
+   690→                  transform: 'translate(-50%, -50%)',
+   691→                  boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)',
+   692→                  border: '2px solid white',
+   693→                }}
+   694→              />
+   695→            </div>
+   696→            {!loaded && (
+   697→              <div className="absolute inset-0 grid place-items-center">
+   698→                <Loader2 className="animate-spin text-white/80" size={24} />
+   699→              </div>
+   700→            )}
+   701→          </div>
+   702→
+   703→          <div className="mt-4 space-y-3">
+   704→            <div>
+   705→              <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+   706→                <span>Zoom</span>
+   707→                <span>{zoom.toFixed(1)}×</span>
+   708→              </div>
+   709→              <Slider
+   710→                value={[Math.round(zoom * 100)]}
+   711→                min={100}
+   712→                max={300}
+   713→                step={1}
+   714→                onValueChange={onZoomChange}
+   715→                disabled={!loaded}
+   716→              />
+   717→            </div>
+   718→            <p className="text-[11px] leading-relaxed text-muted-foreground">
+   719→              Drag to reposition. The crop is always square — what you see in
+   720→              the box is what becomes your photo.
+   721→            </p>
+   722→          </div>
+   723→        </div>
+   724→        <DialogFooter className="flex-row justify-end gap-2 border-t border-border px-4 py-3">
+   725→          <Button
+   726→            type="button"
+   727→            variant="ghost"
+   728→            onClick={onClose}
+   729→            disabled={applying}
+   730→          >
+   731→            <X size={16} className="mr-1" />
+   732→            Cancel
+   733→          </Button>
+   734→          <Button
+   735→            type="button"
+   736→            onClick={apply}
+   737→            disabled={!loaded || applying}
+   738→          >
+   739→            {applying ? (
+   740→              <Loader2 size={16} className="mr-1 animate-spin" />
+   741→            ) : (
+   742→              <Check size={16} className="mr-1" />
+   743→            )}
+   744→            Apply
+   745→          </Button>
+   746→        </DialogFooter>
+   747→      </DialogContent>
+   748→    </Dialog>
+   749→  )
+   750→}
+   751→

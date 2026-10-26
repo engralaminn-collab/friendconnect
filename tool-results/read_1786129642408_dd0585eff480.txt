@@ -1,0 +1,798 @@
+     1→'use client'
+     2→
+     3→import { useEffect, useState, useRef, useCallback } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import { X, Eye, ChevronLeft, ChevronRight, Send, MessageCircle, Loader2, Bookmark, Heart } from 'lucide-react'
+     6→import { api, timeAgo } from '@/lib/api'
+     7→import { UserAvatar } from '@/components/fc/ui'
+     8→import { toast } from 'sonner'
+     9→import { cn } from '@/lib/utils'
+    10→
+    11→export interface StoryItem {
+    12→  id: string
+    13→  type: 'text' | 'image'
+    14→  content: string
+    15→  bg: string | null
+    16→  createdAt: string
+    17→  expiresAt: string
+    18→  viewedByMe: boolean
+    19→  viewCount: number
+    20→  isHighlight: boolean
+    21→  // Round 8: reaction count + the emoji the current user reacted with
+    22→  // (null when the user hasn't reacted). Both come from the GET /api/stories
+    23→  // response — see the round-8 backend worklog entry.
+    24→  reactionCount?: number
+    25→  myReaction?: string | null
+    26→}
+    27→
+    28→export interface StoryViewerUser {
+    29→  userId: string
+    30→  name: string
+    31→  photoUrl: string | null
+    32→  isMe: boolean
+    33→}
+    34→
+    35→export interface StoryReply {
+    36→  id: string
+    37→  userId: string
+    38→  userName: string
+    39→  userPhoto: string | null
+    40→  content: string
+    41→  createdAt: string
+    42→}
+    43→
+    44→// Round 8: a single emoji reaction on a story (returned by
+    45→// GET /api/stories/[id]/reactions). Used to populate the "view who reacted"
+    46→// popover shown on the user's OWN story.
+    47→export interface StoryReaction {
+    48→  id: string
+    49→  userId: string
+    50→  userName: string
+    51→  userPhoto: string | null
+    52→  emoji: string
+    53→  createdAt: string
+    54→}
+    55→
+    56→// Round 8: quick-reaction emojis offered above the reply input on someone
+    57→// else's story. Matches the spec list exactly (❤️😂🔥👏😮😢).
+    58→const STORY_QUICK_REACTIONS = ['❤️', '😂', '🔥', '👏', '😮', '😢'] as const
+    59→
+    60→interface StoryViewerProps {
+    61→  stories: StoryItem[]
+    62→  user: StoryViewerUser
+    63→  onClose: () => void
+    64→  onNavigate?: (userId: string) => void
+    65→  /** Optional starting index (used when opening the viewer on a specific highlight). */
+    66→  startIndex?: number
+    67→  /** Notifies the parent when a story's highlight flag is toggled (so it can refresh). */
+    68→  onHighlightChange?: (storyId: string, isHighlight: boolean) => void
+    69→}
+    70→
+    71→const STORY_DURATION_MS = 5000
+    72→
+    73→/**
+    74→ * Full-screen story viewer modal.
+    75→ * - Progress bars at top (one per story, active fills over ~5s)
+    76→ * - Auto-advance to next story after 5s; after last, close
+    77→ * - Tap left/right thirds to go prev/next, center third to close
+    78→ * - Text stories: full-screen centered text on `bg` background (gradient fallback)
+    79→ * - Image stories: full-screen <img object-contain>
+    80→ * - Header: avatar + name + timeAgo + close. If isMe, shows viewCount.
+    81→ * - On viewing each story for the first time: POST /api/stories/[id]/view
+    82→ * - Keyboard: Escape to close, ArrowLeft/ArrowRight to navigate
+    83→ */
+    84→export function StoryViewer({ stories, user, onClose, startIndex, onHighlightChange }: StoryViewerProps) {
+    85→  const [index, setIndex] = useState(() => {
+    86→    if (typeof startIndex === 'number' && startIndex >= 0 && startIndex < stories.length) {
+    87→      return startIndex
+    88→    }
+    89→    return 0
+    90→  })
+    91→  const [imgError, setImgError] = useState(false)
+    92→  const [replyText, setReplyText] = useState('')
+    93→  const [sending, setSending] = useState(false)
+    94→  const [replies, setReplies] = useState<StoryReply[]>([])
+    95→  const [repliesOpen, setRepliesOpen] = useState(false)
+    96→  const [loadingReplies, setLoadingReplies] = useState(false)
+    97→  const [paused, setPaused] = useState(false)
+    98→  // Local override map for the highlight flag — keeps the icon in sync immediately
+    99→  // after a toggle, before the parent refetches the stories list.
+   100→  const [highlightOverrides, setHighlightOverrides] = useState<Record<string, boolean>>({})
+   101→  const [highlightBusy, setHighlightBusy] = useState(false)
+   102→  // Round 8: story reactions. `myReaction` is a local override for the
+   103→  // active story's my-reaction emoji — set optimistically on tap and
+   104→  // reconciled when the active story changes (via the effect below).
+   105→  // `reactionList` is the fresh list of reactions (with avatars + emoji)
+   106→  // fetched for the user's OWN story so they can see who reacted.
+   107→  const [myReaction, setMyReaction] = useState<string | null>(null)
+   108→  const [reactionList, setReactionList] = useState<StoryReaction[]>([])
+   109→  const [reactionsOpen, setReactionsOpen] = useState(false)
+   110→  const [loadingReactions, setLoadingReactions] = useState(false)
+   111→  const [reacting, setReacting] = useState(false)
+   112→  const viewedRef = useRef<Set<string>>(new Set())
+   113→  const touchStartX = useRef<number | null>(null)
+   114→  const progressBarRef = useRef<HTMLDivElement | null>(null)
+   115→  const rafRef = useRef<number | null>(null)
+   116→  const startRef = useRef<number>(0)
+   117→  const pausedAtRef = useRef<number | null>(null)
+   118→  const pausedAccRef = useRef<number>(0)
+   119→  const pausedRef = useRef(false)
+   120→  const goNextRef = useRef<() => void>(() => {})
+   121→
+   122→  const goNext = useCallback(() => {
+   123→    setIndex((i) => {
+   124→      if (i + 1 >= stories.length) {
+   125→        onClose()
+   126→        return i
+   127→      }
+   128→      return i + 1
+   129→    })
+   130→  }, [stories.length, onClose])
+   131→
+   132→  const goPrev = useCallback(() => {
+   133→    setIndex((i) => Math.max(0, i - 1))
+   134→  }, [])
+   135→
+   136→  // Reset image error state when index changes
+   137→  useEffect(() => {
+   138→    setImgError(false)
+   139→  }, [index])
+   140→
+   141→  // Reset reply text + close replies popover when story changes
+   142→  useEffect(() => {
+   143→    setReplyText('')
+   144→    setRepliesOpen(false)
+   145→  }, [index])
+   146→
+   147→  // Mark the active story as viewed (once per story id)
+   148→  useEffect(() => {
+   149→    const story = stories[index]
+   150→    if (!story) return
+   151→    if (viewedRef.current.has(story.id)) return
+   152→    viewedRef.current.add(story.id)
+   153→    api(`/api/stories/${story.id}/view`, { method: 'POST' }).catch(() => {
+   154→      /* silent — view tracking is best-effort */
+   155→    })
+   156→  }, [index, stories])
+   157→
+   158→  // Keep refs in sync (used by the rAF auto-advance timer)
+   159→  useEffect(() => {
+   160→    goNextRef.current = goNext
+   161→  }, [goNext])
+   162→  useEffect(() => {
+   163→    pausedRef.current = paused
+   164→  }, [paused])
+   165→
+   166→  // Fetch replies when viewing own story (and when story changes)
+   167→  useEffect(() => {
+   168→    if (!user.isMe) {
+   169→      setReplies([])
+   170→      return
+   171→    }
+   172→    const story = stories[index]
+   173→    if (!story) return
+   174→    let cancelled = false
+   175→    setLoadingReplies(true)
+   176→    api<{ replies: StoryReply[] }>(`/api/stories/${story.id}/replies`)
+   177→      .then((data) => {
+   178→        if (!cancelled) setReplies(data.replies)
+   179→      })
+   180→      .catch(() => {
+   181→        if (!cancelled) setReplies([])
+   182→      })
+   183→      .finally(() => {
+   184→        if (!cancelled) setLoadingReplies(false)
+   185→      })
+   186→    return () => {
+   187→      cancelled = true
+   188→    }
+   189→  }, [index, user.isMe, stories])
+   190→
+   191→  // Round 8: reconcile the local `myReaction` override with the active
+   192→  // story's `myReaction` from the API whenever the active story changes.
+   193→  // The override is set optimistically on tap and is otherwise synced from
+   194→  // the parent's stories prop (which is the source of truth from GET /api/stories).
+   195→  useEffect(() => {
+   196→    const story = stories[index]
+   197→    if (!story) return
+   198→    setMyReaction(story.myReaction ?? null)
+   199→    setReactionsOpen(false)
+   200→  }, [index, stories])
+   201→
+   202→  // Round 8: fetch the full reactions list (with avatars + emoji) for the
+   203→  // user's OWN story so they can see who reacted. Mirrors the replies fetch
+   204→  // above. For other users' stories we don't fetch (their reactions are
+   205→  // private — only the count is shown in the header pill).
+   206→  useEffect(() => {
+   207→    if (!user.isMe) {
+   208→      setReactionList([])
+   209→      return
+   210→    }
+   211→    const story = stories[index]
+   212→    if (!story) return
+   213→    let cancelled = false
+   214→    setLoadingReactions(true)
+   215→    api<{ reactions: StoryReaction[] }>(`/api/stories/${story.id}/reactions`)
+   216→      .then((data) => {
+   217→        if (!cancelled) setReactionList(data.reactions || [])
+   218→      })
+   219→      .catch(() => {
+   220→        if (!cancelled) setReactionList([])
+   221→      })
+   222→      .finally(() => {
+   223→        if (!cancelled) setLoadingReactions(false)
+   224→      })
+   225→    return () => {
+   226→      cancelled = true
+   227→    }
+   228→  }, [index, user.isMe, stories])
+   229→
+   230→  // Auto-advance timer using requestAnimationFrame (pauses while the reply input is focused).
+   231→  // Replaces the previous framer-motion progress bar so we can cleanly pause/resume on input focus.
+   232→  useEffect(() => {
+   233→    startRef.current = Date.now()
+   234→    pausedAtRef.current = pausedRef.current ? Date.now() : null
+   235→    pausedAccRef.current = 0
+   236→    if (progressBarRef.current) progressBarRef.current.style.width = '0%'
+   237→
+   238→    const tick = () => {
+   239→      if (pausedAtRef.current === null) {
+   240→        const elapsed = Date.now() - startRef.current - pausedAccRef.current
+   241→        const p = Math.min(1, elapsed / STORY_DURATION_MS)
+   242→        if (progressBarRef.current) {
+   243→          progressBarRef.current.style.width = `${p * 100}%`
+   244→        }
+   245→        if (p >= 1) {
+   246→          goNextRef.current()
+   247→          return
+   248→        }
+   249→      }
+   250→      rafRef.current = requestAnimationFrame(tick)
+   251→    }
+   252→    rafRef.current = requestAnimationFrame(tick)
+   253→
+   254→    return () => {
+   255→      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+   256→    }
+   257→  }, [index])
+   258→
+   259→  // Pause/resume handler (driven by reply input focus)
+   260→  useEffect(() => {
+   261→    if (paused) {
+   262→      pausedAtRef.current = Date.now()
+   263→    } else if (pausedAtRef.current !== null) {
+   264→      pausedAccRef.current += Date.now() - pausedAtRef.current
+   265→      pausedAtRef.current = null
+   266→    }
+   267→  }, [paused])
+   268→
+   269→  // Lock body scroll while open
+   270→  useEffect(() => {
+   271→    const prev = document.body.style.overflow
+   272→    document.body.style.overflow = 'hidden'
+   273→    return () => {
+   274→      document.body.style.overflow = prev
+   275→    }
+   276→  }, [])
+   277→
+   278→  // Keyboard navigation
+   279→  useEffect(() => {
+   280→    const onKey = (e: KeyboardEvent) => {
+   281→      if (e.key === 'Escape') {
+   282→        e.preventDefault()
+   283→        onClose()
+   284→      } else if (e.key === 'ArrowRight') {
+   285→        e.preventDefault()
+   286→        goNext()
+   287→      } else if (e.key === 'ArrowLeft') {
+   288→        e.preventDefault()
+   289→        goPrev()
+   290→      }
+   291→    }
+   292→    window.addEventListener('keydown', onKey)
+   293→    return () => window.removeEventListener('keydown', onKey)
+   294→  }, [onClose, goNext, goPrev])
+   295→
+   296→  // Touch swipe support (left = next, right = prev, down = close)
+   297→  const onTouchStart = (e: React.TouchEvent) => {
+   298→    touchStartX.current = e.touches[0]?.clientX ?? null
+   299→  }
+   300→  const onTouchEnd = (e: React.TouchEvent) => {
+   301→    if (touchStartX.current == null) return
+   302→    const dx = (e.changedTouches[0]?.clientX ?? touchStartX.current) - touchStartX.current
+   303→    touchStartX.current = null
+   304→    if (Math.abs(dx) < 50) return
+   305→    if (dx < 0) goNext()
+   306→    else goPrev()
+   307→  }
+   308→
+   309→  // Post a reply to the current story (friends only — backend enforces).
+   310→  const handleSendReply = useCallback(async () => {
+   311→    const story = stories[index]
+   312→    if (!story) return
+   313→    const content = replyText.trim()
+   314→    if (!content || sending) return
+   315→    setSending(true)
+   316→    try {
+   317→      const data = await api<{ reply: StoryReply }>(`/api/stories/${story.id}/replies`, {
+   318→        method: 'POST',
+   319→        body: JSON.stringify({ content }),
+   320→      })
+   321→      // If we happen to be viewing our own story, surface our own reply in the list.
+   322→      if (user.isMe) {
+   323→        setReplies((prev) => [...prev, data.reply])
+   324→      }
+   325→      setReplyText('')
+   326→      toast.success('Reply sent')
+   327→    } catch (e: any) {
+   328→      toast.error(e?.message || 'Failed to send reply')
+   329→    } finally {
+   330→      setSending(false)
+   331→    }
+   332→  }, [stories, index, replyText, sending, user.isMe])
+   333→
+   334→  // Toggle highlight on the current story (owner only). Optimistic local update
+   335→  // so the bookmark icon flips immediately; the parent is notified so it can
+   336→  // refresh its stories list (the highlighted story moves between the
+   337→  // "stories" and "highlights" buckets on the next fetch).
+   338→  const handleToggleHighlight = useCallback(async () => {
+   339→    const story = stories[index]
+   340→    if (!story || highlightBusy) return
+   341→    const next = !(highlightOverrides[story.id] ?? story.isHighlight)
+   342→    setHighlightOverrides((prev) => ({ ...prev, [story.id]: next }))
+   343→    setHighlightBusy(true)
+   344→    try {
+   345→      await api(`/api/stories/${story.id}/highlight`, {
+   346→        method: 'POST',
+   347→        body: JSON.stringify({ highlight: next }),
+   348→      })
+   349→      toast.success(next ? 'Added to highlights' : 'Removed from highlights')
+   350→      onHighlightChange?.(story.id, next)
+   351→    } catch (e: any) {
+   352→      // Revert the optimistic update.
+   353→      setHighlightOverrides((prev) => ({ ...prev, [story.id]: !next }))
+   354→      toast.error(e?.message || 'Failed to toggle highlight')
+   355→    } finally {
+   356→      setHighlightBusy(false)
+   357→    }
+   358→  }, [stories, index, highlightOverrides, highlightBusy, onHighlightChange])
+   359→
+   360→  // Round 8: react to the current story with an emoji. The backend upserts
+   361→  // (one reaction per user per story — replaces any existing reaction by me).
+   362→  // We update the local `myReaction` state optimistically so the active emoji
+   363→  // flips immediately; on error we revert. Tapping the same emoji again is a
+   364→  // no-op visually but still POSTs (the backend re-creates the same reaction —
+   365→  // harmless + idempotent). Doesn't pause the auto-advance timer (reactions
+   366→  // are quick taps, the user has 5s to react before the story advances).
+   367→  const handleReact = useCallback(async (emoji: string) => {
+   368→    const story = stories[index]
+   369→    if (!story || reacting) return
+   370→    const prev = myReaction
+   371→    setMyReaction(emoji)
+   372→    setReacting(true)
+   373→    try {
+   374→      await api(`/api/stories/${story.id}/reactions`, {
+   375→        method: 'POST',
+   376→        body: JSON.stringify({ emoji }),
+   377→      })
+   378→      toast.success('Reacted')
+   379→      // If we're viewing our own story, surface our own reaction in the
+   380→      // popover list. The fresh GET /api/stories/[id]/reactions effect will
+   381→      // reconcile on the next story change anyway, but this keeps the list
+   382→      // in sync immediately so the count + popover are accurate right now.
+   383→      if (user.isMe) {
+   384→        setReactionList((prevList) => {
+   385→          // Remove any existing reaction by me, then add the new one.
+   386→          const filtered = prevList.filter((r) => r.userId !== user.userId)
+   387→          return [
+   388→            ...filtered,
+   389→            {
+   390→              id: `local-${story.id}-${user.userId}`,
+   391→              userId: user.userId,
+   392→              userName: user.name,
+   393→              userPhoto: user.photoUrl,
+   394→              emoji,
+   395→              createdAt: new Date().toISOString(),
+   396→            },
+   397→          ]
+   398→        })
+   399→      }
+   400→    } catch (e: any) {
+   401→      setMyReaction(prev)
+   402→      toast.error(e?.message || 'Failed to react')
+   403→    } finally {
+   404→      setReacting(false)
+   405→    }
+   406→  }, [stories, index, reacting, myReaction, user.isMe, user.userId, user.name, user.photoUrl])
+   407→
+   408→  if (!stories.length) {
+   409→    return null
+   410→  }
+   411→
+   412→  const current = stories[index]
+   413→  if (!current) return null
+   414→
+   415→  const bgStyle = current.bg || 'linear-gradient(135deg, var(--color-primary), var(--color-accent))'
+   416→  const isHighlighted = highlightOverrides[current.id] ?? current.isHighlight
+   417→
+   418→  // Round 8: derived reaction count for the header pill. For own stories we
+   419→  // prefer the fresh reactions-list length (the GET /api/stories/[id]/reactions
+   420→  // fetch); for other users' stories we adjust the API count for the local
+   421→  // myReaction override so the pill flips to N+1 immediately on first react.
+   422→  // Declared here (BEFORE the JSX) to avoid a temporal-dead-zone warning.
+   423→  const headerReactionCount = user.isMe
+   424→    ? Math.max(reactionList.length, current.reactionCount || 0)
+   425→    : (current.reactionCount || 0) + (myReaction && !current.myReaction ? 1 : 0)
+   426→
+   427→  return (
+   428→    <motion.div
+   429→      initial={{ opacity: 0 }}
+   430→      animate={{ opacity: 1 }}
+   431→      exit={{ opacity: 0 }}
+   432→      transition={{ duration: 0.2 }}
+   433→      className="fixed inset-0 z-[90] bg-black select-none"
+   434→      onTouchStart={onTouchStart}
+   435→      onTouchEnd={onTouchEnd}
+   436→    >
+   437→      {/* Story content (crossfades between stories) */}
+   438→      <AnimatePresence>
+   439→        <motion.div
+   440→          key={current.id}
+   441→          initial={{ opacity: 0 }}
+   442→          animate={{ opacity: 1 }}
+   443→          exit={{ opacity: 0 }}
+   444→          transition={{ duration: 0.25 }}
+   445→          className="absolute inset-0"
+   446→        >
+   447→          {current.type === 'image' && !imgError ? (
+   448→            <img
+   449→              src={current.content}
+   450→              alt={user.name ? `${user.name}'s story` : 'Story'}
+   451→              className="h-full w-full object-contain"
+   452→              onError={() => setImgError(true)}
+   453→            />
+   454→          ) : current.type === 'image' && imgError ? (
+   455→            <div
+   456→              className="flex h-full w-full flex-col items-center justify-center gap-3 p-8 text-center"
+   457→              style={{ background: 'linear-gradient(135deg, #1f1f23, #000000)' }}
+   458→            >
+   459→              <p className="text-lg font-semibold text-white">Image unavailable</p>
+   460→              <p className="text-sm text-white/60">This story media could not be loaded.</p>
+   461→            </div>
+   462→          ) : (
+   463→            <div
+   464→              className="flex h-full w-full items-center justify-center p-8"
+   465→              style={{ background: bgStyle }}
+   466→            >
+   467→              <p className="whitespace-pre-wrap break-words text-center text-2xl font-bold leading-snug text-white drop-shadow-sm sm:text-3xl md:text-4xl">
+   468→                {current.content}
+   469→              </p>
+   470→            </div>
+   471→          )}
+   472→        </motion.div>
+   473→      </AnimatePresence>
+   474→
+   475→      {/* Tap zones (left = prev, center = close, right = next) */}
+   476→      <div className="absolute inset-0 z-10 flex">
+   477→        <button
+   478→          type="button"
+   479→          aria-label="Previous story"
+   480→          onClick={goPrev}
+   481→          className="h-full w-1/3 cursor-pointer"
+   482→        />
+   483→        <button
+   484→          type="button"
+   485→          aria-label="Close story viewer"
+   486→          onClick={onClose}
+   487→          className="h-full w-1/3 cursor-pointer"
+   488→        />
+   489→        <button
+   490→          type="button"
+   491→          aria-label="Next story"
+   492→          onClick={goNext}
+   493→          className="h-full w-1/3 cursor-pointer"
+   494→        />
+   495→      </div>
+   496→
+   497→      {/* Progress bars */}
+   498→      <div className="fc-safe-top pointer-events-none absolute inset-x-0 top-0 z-20 flex gap-1 p-3">
+   499→        {stories.map((s, i) => (
+   500→          <div
+   501→            key={s.id}
+   502→            className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/30"
+   503→          >
+   504→            {i < index ? (
+   505→              <div className="h-full w-full bg-white" />
+   506→            ) : i === index ? (
+   507→              <div
+   508→                ref={progressBarRef}
+   509→                className="h-full bg-white"
+   510→                style={{ width: '0%' }}
+   511→              />
+   512→            ) : null}
+   513→          </div>
+   514→        ))}
+   515→      </div>
+   516→
+   517→      {/* Header: avatar + name + views (if me) + reactions + time + close */}
+   518→      <div className="fc-safe-top pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center gap-3 px-4 pt-7">
+   519→        <div className="pointer-events-auto">
+   520→          <UserAvatar name={user.name} src={user.photoUrl} size={38} />
+   521→        </div>
+   522→        <div className="pointer-events-auto min-w-0 flex-1">
+   523→          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+   524→            <span className="truncate text-sm font-semibold text-white drop-shadow-sm">
+   525→              {user.name}
+   526→            </span>
+   527→            {user.isMe && (
+   528→              <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
+   529→                <Eye size={11} />
+   530→                {current.viewCount} {current.viewCount === 1 ? 'view' : 'views'}
+   531→              </span>
+   532→            )}
+   533→            {/* Round 8: small reaction-count pill next to the views pill.
+   534→                Shown to everyone when there's at least one reaction. */}
+   535→            {headerReactionCount > 0 && (
+   536→              <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
+   537→                <Heart size={11} className="fill-current" />
+   538→                {headerReactionCount}
+   539→              </span>
+   540→            )}
+   541→            <span className="text-xs text-white/70 drop-shadow-sm">
+   542→              {timeAgo(current.createdAt)}
+   543→            </span>
+   544→          </div>
+   545→        </div>
+   546→        <button
+   547→          type="button"
+   548→          aria-label="Close"
+   549→          onClick={onClose}
+   550→          className="pointer-events-auto grid h-9 w-9 place-items-center rounded-full text-white/90 transition hover:bg-white/15 hover:text-white active:scale-95"
+   551→        >
+   552→          <X size={22} />
+   553→        </button>
+   554→      </div>
+   555→
+   556→      {/* Highlight toggle (own stories only) — sits to the left of the close button */}
+   557→      {user.isMe && (
+   558→        <button
+   559→          type="button"
+   560→          onClick={handleToggleHighlight}
+   561→          disabled={highlightBusy}
+   562→          aria-label={isHighlighted ? 'Remove from highlights' : 'Add to highlights'}
+   563→          aria-pressed={isHighlighted}
+   564→          title={isHighlighted ? 'Remove from highlights' : 'Add to highlights'}
+   565→          className="absolute right-16 top-4 z-20 grid h-9 w-9 place-items-center rounded-full bg-black/40 text-white backdrop-blur transition hover:bg-black/60 active:scale-95 disabled:opacity-60"
+   566→        >
+   567→          {highlightBusy ? (
+   568→            <Loader2 size={16} className="animate-spin" />
+   569→          ) : (
+   570→            <Bookmark
+   571→              size={16}
+   572→              className={cn(isHighlighted && 'fill-current text-primary')}
+   573→            />
+   574→          )}
+   575→        </button>
+   576→      )}
+   577→
+   578→      {/* Side nav arrows (desktop / large screens) */}
+   579→      <button
+   580→        type="button"
+   581→        aria-label="Previous"
+   582→        onClick={goPrev}
+   583→        className={cn(
+   584→          'absolute left-2 top-1/2 z-30 hidden -translate-y-1/2 place-items-center rounded-full bg-white/10 p-2 text-white backdrop-blur-sm transition hover:bg-white/25 active:scale-95 md:grid',
+   585→          index === 0 && 'pointer-events-none opacity-0'
+   586→        )}
+   587→      >
+   588→        <ChevronLeft size={22} />
+   589→      </button>
+   590→      <button
+   591→        type="button"
+   592→        aria-label="Next"
+   593→        onClick={goNext}
+   594→        className="absolute right-2 top-1/2 z-30 hidden -translate-y-1/2 place-items-center rounded-full bg-white/10 p-2 text-white backdrop-blur-sm transition hover:bg-white/25 active:scale-95 md:grid"
+   595→      >
+   596→        <ChevronRight size={22} />
+   597→      </button>
+   598→
+   599→      {/* Subtle bottom gradient for legibility on image stories */}
+   600→      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-24 bg-gradient-to-t from-black/50 to-transparent" />
+   601→
+   602→      {/* Round 8: story reaction bar (others' stories only). Renders a pill of
+   603→          6 quick-reaction emojis ABOVE the reply input. Tapping one POSTs to
+   604→          /api/stories/[id]/reactions { emoji } and flips the local myReaction
+   605→          optimistically. The active emoji (matching myReaction) gets a primary
+   606→          ring so the user can see what they reacted with + tap again to swap
+   607→          (the backend replaces). */}
+   608→      {!user.isMe && (
+   609→        <div className="absolute bottom-20 left-1/2 z-10 flex -translate-x-1/2 gap-1 rounded-full border border-white/20 bg-black/40 px-2 py-1.5 backdrop-blur">
+   610→          {STORY_QUICK_REACTIONS.map((emoji) => {
+   611→            const active = myReaction === emoji
+   612→            return (
+   613→              <button
+   614→                key={emoji}
+   615→                type="button"
+   616→                onClick={() => handleReact(emoji)}
+   617→                disabled={reacting}
+   618→                aria-label={`React with ${emoji}`}
+   619→                aria-pressed={active}
+   620→                className={cn(
+   621→                  'grid h-9 w-9 place-items-center rounded-full text-xl transition hover:scale-125 disabled:opacity-50',
+   622→                  active && 'ring-2 ring-primary'
+   623→                )}
+   624→              >
+   625→                {emoji}
+   626→              </button>
+   627→            )
+   628→          })}
+   629→        </div>
+   630→      )}
+   631→
+   632→      {/* Reply input bar (others) OR Replies button + popover (own story) */}
+   633→      <div className="absolute bottom-4 left-4 right-4 z-10">
+   634→        {user.isMe ? (
+   635→          <div className="relative">
+   636→            {/* Round 8: reactions button + popover (own story only, when
+   637→                there's at least one reaction). Sits above the Replies button
+   638→                so the user can see who reacted at a glance. Fetches the full
+   639→                reactions list (with avatars + emoji) from
+   640→                GET /api/stories/[id]/reactions. */}
+   641→            {headerReactionCount > 0 && (
+   642→              <div className="relative mb-2 flex justify-center">
+   643→                <button
+   644→                  type="button"
+   645→                  onClick={() => setReactionsOpen((v) => !v)}
+   646→                  aria-expanded={reactionsOpen}
+   647→                  aria-label="View story reactions"
+   648→                  className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/40 px-3 py-1.5 text-xs font-medium text-white backdrop-blur transition hover:bg-black/60"
+   649→                >
+   650→                  <Heart size={12} className="fill-current text-primary" />
+   651→                  {headerReactionCount} {headerReactionCount === 1 ? 'reaction' : 'reactions'}
+   652→                  {reactionsOpen ? <X size={12} /> : null}
+   653→                </button>
+   654→                <AnimatePresence>
+   655→                  {reactionsOpen && (
+   656→                    <motion.div
+   657→                      initial={{ opacity: 0, y: 8 }}
+   658→                      animate={{ opacity: 1, y: 0 }}
+   659→                      exit={{ opacity: 0, y: 8 }}
+   660→                      transition={{ duration: 0.2 }}
+   661→                      className="fc-scroll absolute bottom-full left-1/2 mb-2 max-h-72 w-64 max-w-[90vw] -translate-x-1/2 overflow-y-auto rounded-xl bg-black/80 p-2 backdrop-blur"
+   662→                    >
+   663→                      {loadingReactions && reactionList.length === 0 ? (
+   664→                        <div className="grid place-items-center py-8">
+   665→                          <Loader2 size={20} className="animate-spin text-white/70" />
+   666→                        </div>
+   667→                      ) : reactionList.length === 0 ? (
+   668→                        <div className="grid place-items-center gap-2 py-8 text-center text-sm text-white/60">
+   669→                          <Heart size={24} className="opacity-50" />
+   670→                          No reactions yet
+   671→                        </div>
+   672→                      ) : (
+   673→                        <ul className="space-y-0.5">
+   674→                          {reactionList.map((r) => (
+   675→                            <li
+   676→                              key={r.id}
+   677→                              className="flex items-center gap-2 rounded-lg p-1.5 transition hover:bg-white/5"
+   678→                            >
+   679→                              <UserAvatar name={r.userName} src={r.userPhoto} size={28} />
+   680→                              <span className="min-w-0 flex-1 truncate text-xs font-semibold text-white">
+   681→                                {r.userName}
+   682→                              </span>
+   683→                              <span className="text-lg">{r.emoji}</span>
+   684→                            </li>
+   685→                          ))}
+   686→                        </ul>
+   687→                      )}
+   688→                    </motion.div>
+   689→                  )}
+   690→                </AnimatePresence>
+   691→              </div>
+   692→            )}
+   693→            <button
+   694→              type="button"
+   695→              onClick={() => setRepliesOpen((v) => !v)}
+   696→              aria-expanded={repliesOpen}
+   697→              aria-label="View story replies"
+   698→              className="flex w-full items-center gap-2 rounded-full border border-white/20 bg-black/40 px-4 py-2 text-white backdrop-blur transition hover:bg-black/60"
+   699→            >
+   700→              <MessageCircle size={16} />
+   701→              <span className="flex-1 text-left text-sm">
+   702→                {loadingReplies
+   703→                  ? 'Loading replies…'
+   704→                  : replies.length === 0
+   705→                  ? 'No replies yet'
+   706→                  : `Replies (${replies.length})`}
+   707→              </span>
+   708→              {repliesOpen ? <X size={16} /> : null}
+   709→            </button>
+   710→            <AnimatePresence>
+   711→              {repliesOpen && (
+   712→                <motion.div
+   713→                  initial={{ opacity: 0, y: 8 }}
+   714→                  animate={{ opacity: 1, y: 0 }}
+   715→                  exit={{ opacity: 0, y: 8 }}
+   716→                  transition={{ duration: 0.2 }}
+   717→                  className="fc-scroll absolute bottom-full left-0 right-0 mb-2 max-h-72 overflow-y-auto rounded-xl bg-black/80 p-2 backdrop-blur"
+   718→                >
+   719→                  {loadingReplies && replies.length === 0 ? (
+   720→                    <div className="grid place-items-center py-8">
+   721→                      <Loader2 size={20} className="animate-spin text-white/70" />
+   722→                    </div>
+   723→                  ) : replies.length === 0 ? (
+   724→                    <div className="grid place-items-center gap-2 py-8 text-center text-sm text-white/60">
+   725→                      <MessageCircle size={24} className="opacity-50" />
+   726→                      No replies yet
+   727→                    </div>
+   728→                  ) : (
+   729→                    <ul className="space-y-1">
+   730→                      {replies.map((r) => (
+   731→                        <li
+   732→                          key={r.id}
+   733→                          className="flex items-start gap-2 rounded-lg p-2 transition hover:bg-white/5"
+   734→                        >
+   735→                          <UserAvatar name={r.userName} src={r.userPhoto} size={32} />
+   736→                          <div className="min-w-0 flex-1">
+   737→                            <div className="flex items-baseline justify-between gap-2">
+   738→                              <span className="truncate text-xs font-semibold text-white">
+   739→                                {r.userName}
+   740→                              </span>
+   741→                              <span className="shrink-0 text-[10px] text-white/50">
+   742→                                {timeAgo(r.createdAt)}
+   743→                              </span>
+   744→                            </div>
+   745→                            <p className="break-words text-sm text-white/90">{r.content}</p>
+   746→                          </div>
+   747→                        </li>
+   748→                      ))}
+   749→                    </ul>
+   750→                  )}
+   751→                </motion.div>
+   752→              )}
+   753→            </AnimatePresence>
+   754→          </div>
+   755→        ) : (
+   756→          <form
+   757→            onSubmit={(e) => {
+   758→              e.preventDefault()
+   759→              handleSendReply()
+   760→            }}
+   761→            className="flex items-center gap-2 rounded-full border border-white/20 bg-black/40 px-4 py-2 text-white backdrop-blur"
+   762→          >
+   763→            <input
+   764→              type="text"
+   765→              value={replyText}
+   766→              onChange={(e) => setReplyText(e.target.value)}
+   767→              onFocus={() => setPaused(true)}
+   768→              onBlur={() => setPaused(false)}
+   769→              onKeyDown={(e) => {
+   770→                if (e.key === 'Enter' && !e.shiftKey) {
+   771→                  e.preventDefault()
+   772→                  handleSendReply()
+   773→                }
+   774→              }}
+   775→              placeholder={`Reply to ${user.name.split(' ')[0]}…`}
+   776→              maxLength={500}
+   777→              className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/60"
+   778→              aria-label="Reply to story"
+   779→            />
+   780→            <button
+   781→              type="submit"
+   782→              disabled={!replyText.trim() || sending}
+   783→              aria-label="Send reply"
+   784→              className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition hover:bg-primary/90 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+   785→            >
+   786→              {sending ? (
+   787→                <Loader2 size={15} className="animate-spin" />
+   788→              ) : (
+   789→                <Send size={15} />
+   790→              )}
+   791→            </button>
+   792→          </form>
+   793→        )}
+   794→      </div>
+   795→    </motion.div>
+   796→  )
+   797→}
+   798→

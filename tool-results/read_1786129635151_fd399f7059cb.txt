@@ -1,0 +1,2002 @@
+     1→'use client'
+     2→/* eslint-disable react-hooks/set-state-in-effect */
+     3→
+     4→import * as React from 'react'
+     5→import { useEffect, useState, useRef, useCallback } from 'react'
+     6→import { useApp } from '@/lib/store'
+     7→import { useAuth } from '@/hooks/use-auth'
+     8→import { useSocket } from '@/hooks/use-socket'
+     9→import { RT } from '@/lib/constants'
+    10→import { api, uploadFile, clockTime, timeAgo, lastSeenText } from '@/lib/api'
+    11→import { UserAvatar, EmptyState, SectionTitle } from '@/components/fc/ui'
+    12→import { Input } from '@/components/ui/input'
+    13→import { Textarea } from '@/components/ui/textarea'
+    14→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+    15→import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+    16→import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogFooter } from '@/components/ui/dialog'
+    17→import {
+    18→  AlertDialog,
+    19→  AlertDialogContent,
+    20→  AlertDialogHeader,
+    21→  AlertDialogTitle,
+    22→  AlertDialogDescription,
+    23→  AlertDialogFooter,
+    24→  AlertDialogAction,
+    25→  AlertDialogCancel,
+    26→} from '@/components/ui/alert-dialog'
+    27→import { Checkbox } from '@/components/ui/checkbox'
+    28→import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+    29→import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+    30→import { Label } from '@/components/ui/label'
+    31→import { Button } from '@/components/ui/button'
+    32→import { toast } from 'sonner'
+    33→import { cn } from '@/lib/utils'
+    34→import {
+    35→  ArrowLeft,
+    36→  Phone,
+    37→  Video,
+    38→  Send,
+    39→  Paperclip,
+    40→  Smile,
+    41→  Check,
+    42→  CheckCheck,
+    43→  Clock,
+    44→  FileText,
+    45→  Download,
+    46→  Maximize2,
+    47→  Search,
+    48→  Users,
+    49→  MessageCircle,
+    50→  Loader2,
+    51→  Pin,
+    52→  Bell,
+    53→  BellOff,
+    54→  Mic,
+    55→  X,
+    56→  Trash2,
+    57→  Heart,
+    58→  Forward,
+    59→  Copy,
+    60→  Reply,
+    61→  Star,
+    62→  MoreVertical,
+    63→  Timer,
+    64→  Archive,
+    65→  ArchiveRestore,
+    66→  Pencil,
+    67→  ChevronDown,
+    68→  ChevronRight,
+    69→  PinOff,
+    70→  MessageSquare,
+    71→  Camera,
+    72→  Image as ImageIcon,
+    73→  CornerUpLeft,
+    74→  Calendar,
+    75→} from 'lucide-react'
+    76→
+    77→// ---------------- types ----------------
+    78→type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document'
+    79→type MessageStatus = 'SENDING' | 'SENT' | 'DELIVERED' | 'SEEN'
+    80→
+    81→interface Reaction {
+    82→  emoji: string
+    83→  userId: string
+    84→  userName: string
+    85→}
+    86→
+    87→interface Conversation {
+    88→  id: string
+    89→  username: string
+    90→  name: string
+    91→  photoUrl: string | null
+    92→  unread: number
+    93→  pinned?: boolean
+    94→  muted?: boolean
+    95→  archived?: boolean
+    96→  lastMessage: {
+    97→    content: string
+    98→    type: string
+    99→    senderId: string
+   100→    createdAt: string
+   101→    status: string
+   102→  } | null
+   103→}
+   104→
+   105→interface GroupLite {
+   106→  id: string
+   107→  name: string
+   108→  description: string | null
+   109→  photoUrl: string | null
+   110→  role: string
+   111→  memberCount: number
+   112→  createdAt: string
+   113→}
+   114→
+   115→interface Message {
+   116→  id: string
+   117→  tempId?: string
+   118→  senderId: string
+   119→  senderName?: string | null
+   120→  senderPhoto?: string | null
+   121→  receiverId?: string | null
+   122→  groupId?: string | null
+   123→  content: string
+   124→  type: MessageType
+   125→  fileUrl?: string | null
+   126→  fileName?: string | null
+   127→  fileSize?: number | null
+   128→  mimeType?: string | null
+   129→  status?: MessageStatus
+   130→  createdAt: string
+   131→  reactions?: Reaction[]
+   132→  deletedFor?: string
+   133→  forwardedFrom?: string | null
+   134→  starred?: boolean
+   135→  expiresAt?: string | null
+   136→  edited?: boolean
+   137→  editedAt?: string | null
+   138→  // Round 6: per-user message pin within a 1:1 chat. Holds the userId that
+   139→  // pinned this message (me.id when pinned by me, otherwise null). Only one
+   140→  // pinned message per 1:1 conversation is allowed by the backend.
+   141→  pinnedBy?: string | null
+   142→  // Round 7: id of the message this message is replying to (null when not a
+   143→  // reply). Returned by GET /api/messages + the message:new / group:message:new
+   144→  // socket events + sent in the message:send / group:message:send payloads.
+   145→  replyToId?: string | null
+   146→}
+   147→
+   148→interface Friend {
+   149→  id: string
+   150→  username: string
+   151→  name: string
+   152→  photoUrl: string | null
+   153→  lastSeen: string | null
+   154→}
+   155→
+   156→interface PeerInfo {
+   157→  name: string
+   158→  photoUrl: string | null
+   159→  username?: string
+   160→  lastSeen?: string | null
+   161→  memberCount?: number
+   162→}
+   163→
+   164→// Round 6: global message search result shape returned by
+   165→// GET /api/messages/search?q=QUERY. Each result carries the conversation
+   166→// context (peerId/peerName for direct, groupId/groupName for group) so the
+   167→// UI can route the tap to the right chat.
+   168→interface GlobalSearchResult {
+   169→  messageId: string
+   170→  content: string
+   171→  type: string
+   172→  createdAt: string
+   173→  senderId: string
+   174→  senderName: string
+   175→  conversationType: 'direct' | 'group'
+   176→  peerId?: string
+   177→  peerName?: string
+   178→  peerUsername?: string
+   179→  peerPhoto?: string | null
+   180→  groupId?: string
+   181→  groupName?: string
+   182→}
+   183→
+   184→const EMOJIS = [
+   185→  '😀', '😄', '😁', '😂', '🥹', '😊', '😍', '😘',
+   186→  '😎', '🤔', '😴', '😭', '😡', '🥳', '😇', '🙃',
+   187→  '👍', '👎', '🙏', '👏', '🙌', '🤝', '👋', '✌️',
+   188→  '🤞', '💪', '❤️', '🧡', '💛', '💚', '💙', '💜',
+   189→  '🔥', '✨', '🎉', '🎁', '💯', '⭐', '🌟', '☀️',
+   190→  '🌙', '🌈', '☕', '🍕', '🍔', '🍟', '🍦', '🍓',
+   191→  '🌸', '🌺', '🐶', '🐱', '🦄', '🐢', '🦋', '🐝',
+   192→  '⚽', '🏀', '🎵', '🎮', '📱', '💻', '📚', '✅',
+   193→  '❌', '❓', '❗', '🚀', '👀', '🫶', '🤗', '🫡',
+   194→]
+   195→
+   196→// ---------------- helpers ----------------
+   197→function formatBytes(bytes: number | null | undefined): string {
+   198→  if (bytes === null || bytes === undefined) return ''
+   199→  if (bytes === 0) return '0 B'
+   200→  const units = ['B', 'KB', 'MB', 'GB']
+   201→  let n = bytes
+   202→  let i = 0
+   203→  while (n >= 1024 && i < units.length - 1) {
+   204→    n /= 1024
+   205→    i++
+   206→  }
+   207→  return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`
+   208→}
+   209→
+   210→function fileTypeFromMime(mime: string | null | undefined): MessageType {
+   211→  if (!mime) return 'document'
+   212→  if (mime.startsWith('image/')) return 'image'
+   213→  if (mime.startsWith('video/')) return 'video'
+   214→  if (mime.startsWith('audio/')) return 'audio'
+   215→  return 'document'
+   216→}
+   217→
+   218→// Detect PDF documents by mimeType or .pdf file extension — used to decide
+   219→// whether to render an inline <iframe> preview vs. the simple download card.
+   220→function isPdfMessage(msg: Message): boolean {
+   221→  if (msg.mimeType && msg.mimeType.toLowerCase() === 'application/pdf') return true
+   222→  if (msg.fileName && msg.fileName.toLowerCase().endsWith('.pdf')) return true
+   223→  return false
+   224→}
+   225→
+   226→function linkify(text: string): React.ReactNode[] {
+   227→  const parts = text.split(/(https?:\/\/[^\s]+)/g)
+   228→  return parts.map((part, i) => {
+   229→    if (/^https?:\/\//.test(part)) {
+   230→      return (
+   231→        <a key={i} href={part} target="_blank" rel="noreferrer" className="underline break-all">
+   232→          {part}
+   233→        </a>
+   234→      )
+   235→    }
+   236→    return <span key={i}>{part}</span>
+   237→  })
+   238→}
+   239→
+   240→function toISO(d: any): string {
+   241→  if (!d) return new Date().toISOString()
+   242→  if (typeof d === 'string') return d
+   243→  if (d instanceof Date) return d.toISOString()
+   244→  try {
+   245→    return new Date(d).toISOString()
+   246→  } catch {
+   247→    return new Date().toISOString()
+   248→  }
+   249→}
+   250→
+   251→function newTempId(): string {
+   252→  return `t_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+   253→}
+   254→
+   255→// Round 8: format an ISO date for the scheduled-messages viewer/list,
+   256→// e.g. "Jan 5, 3:42 PM". Used by the toast + the ScheduledMessagesDialog rows.
+   257→function formatScheduledTime(iso: string | null | undefined): string {
+   258→  if (!iso) return ''
+   259→  const d = new Date(iso)
+   260→  if (isNaN(d.getTime())) return ''
+   261→  return d.toLocaleString([], {
+   262→    month: 'short',
+   263→    day: 'numeric',
+   264→    hour: '2-digit',
+   265→    minute: '2-digit',
+   266→  })
+   267→}
+   268→
+   269→// Round 8: convert a Date to the YYYY-MM-DDTHH:MM format required by
+   270→// <input type="datetime-local">. The value is in the user's local timezone
+   271→// (the browser interprets datetime-local values as local time, not UTC).
+   272→function toLocalDateTimeInput(d: Date): string {
+   273→  const pad = (n: number) => String(n).padStart(2, '0')
+   274→  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+   275→}
+   276→
+   277→function normalizeMessage(raw: any): Message {
+   278→  return {
+   279→    id: raw.id,
+   280→    senderId: raw.senderId,
+   281→    senderName: raw.senderName ?? raw.sender?.name ?? null,
+   282→    senderPhoto: raw.senderPhoto ?? raw.sender?.profile?.photoUrl ?? null,
+   283→    receiverId: raw.receiverId ?? null,
+   284→    groupId: raw.groupId ?? null,
+   285→    content: raw.content ?? '',
+   286→    type: (raw.type ?? 'text') as MessageType,
+   287→    fileUrl: raw.fileUrl ?? null,
+   288→    fileName: raw.fileName ?? null,
+   289→    fileSize: raw.fileSize ?? null,
+   290→    mimeType: raw.mimeType ?? null,
+   291→    status: (raw.status ?? 'SENT') as MessageStatus,
+   292→    createdAt: toISO(raw.createdAt),
+   293→    reactions: Array.isArray(raw.reactions) ? raw.reactions.map((r: any) => ({ emoji: r.emoji, userId: r.userId, userName: r.userName })) : [],
+   294→    deletedFor: raw.deletedFor ?? '',
+   295→    forwardedFrom: raw.forwardedFrom ?? null,
+   296→    starred: !!raw.starred,
+   297→    expiresAt: raw.expiresAt ?? null,
+   298→    edited: !!raw.edited,
+   299→    editedAt: raw.editedAt ?? null,
+   300→    pinnedBy: raw.pinnedBy ?? null,
+   301→    replyToId: raw.replyToId ?? null,
+   302→  }
+   303→}
+   304→
+   305→// A message is rendered as the "🚫 This message was deleted" placeholder when
+   306→// it was deleted for everyone OR explicitly deleted-for-me (deletedFor is a
+   307→// comma-separated list of user ids, or the literal 'everyone').
+   308→function isDeletedForMe(msg: Message, meId?: string): boolean {
+   309→  if (!msg.deletedFor) return false
+   310→  if (msg.deletedFor === 'everyone') return true
+   311→  if (!meId) return false
+   312→  return msg.deletedFor
+   313→    .split(',')
+   314→    .map((s) => s.trim())
+   315→    .filter(Boolean)
+   316→    .includes(meId)
+   317→}
+   318→
+   319→function lastMessagePreview(c: Conversation, meId: string | undefined): string {
+   320→  if (!c.lastMessage) return 'Tap to start chatting'
+   321→  const lm = c.lastMessage
+   322→  const prefix = meId && lm.senderId === meId ? 'You: ' : ''
+   323→  if (lm.type === 'image') return `${prefix}📷 Photo`
+   324→  if (lm.type === 'video') return `${prefix}🎥 Video`
+   325→  if (lm.type === 'audio') return `${prefix}🎤 Audio`
+   326→  if (lm.type === 'document') return `${prefix}📄 Document`
+   327→  return `${prefix}${lm.content}`
+   328→}
+   329→
+   330→// ---------------- main entry ----------------
+   331→export function ChatView() {
+   332→  const activeChatUserId = useApp((s) => s.activeChatUserId)
+   333→  const activeChatGroupId = useApp((s) => s.activeChatGroupId)
+   334→  const back = useCallback(() => {
+   335→    useApp.setState({ activeChatUserId: null, activeChatGroupId: null })
+   336→  }, [])
+   337→
+   338→  if (activeChatUserId) {
+   339→    return <ChatRoom mode="direct" peerId={activeChatUserId} onBack={back} />
+   340→  }
+   341→  if (activeChatGroupId) {
+   342→    return <ChatRoom mode="group" peerId={activeChatGroupId} onBack={back} />
+   343→  }
+   344→  return <ConversationList />
+   345→}
+   346→
+   347→// ---------------- conversation list ----------------
+   348→function ConversationList() {
+   349→  const [tab, setTab] = useState<'chats' | 'groups'>('chats')
+   350→  const [query, setQuery] = useState('')
+   351→  const [conversations, setConversations] = useState<Conversation[]>([])
+   352→  const [archivedConvs, setArchivedConvs] = useState<Conversation[]>([])
+   353→  const [drafts, setDrafts] = useState<Map<string, string>>(new Map())
+   354→  const [archivedExpanded, setArchivedExpanded] = useState(false)
+   355→  const [groups, setGroups] = useState<GroupLite[]>([])
+   356→  const [loading, setLoading] = useState(true)
+   357→  // Round 6: global message search state — fires debounced (400ms) when the
+   358→  // search box has text. Results render in the search dropdown alongside the
+   359→  // local conversation filter.
+   360→  const [globalResults, setGlobalResults] = useState<GlobalSearchResult[]>([])
+   361→  const [globalLoading, setGlobalLoading] = useState(false)
+   362→  const globalSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+   363→  // Round 7: typing-status in conversation list. Tracks which conversations
+   364→  // currently have someone typing (peerId for 1:1, `group:${groupId}` for
+   365→  // groups). Each entry has a 3s auto-expiry timer so a missed isTyping:false
+   366→  // doesn't leave a stale "typing…" indicator forever.
+   367→  const [typingConvs, setTypingConvs] = useState<Set<string>>(new Set())
+   368→  const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+   369→  const { openChat, openGroupChat } = useApp()
+   370→  const { socket, isOnline } = useSocket()
+   371→  const { user: me } = useAuth()
+   372→  const meId = me?.id
+   373→
+   374→  const load = useCallback(async () => {
+   375→    setLoading(true)
+   376→    try {
+   377→      const [c, g, d] = await Promise.all([
+   378→        api<{ conversations: Conversation[]; archived: Conversation[] }>(
+   379→          '/api/messages/conversations'
+   380→        ).catch(() => ({ conversations: [] as Conversation[], archived: [] as Conversation[] })),
+   381→        api<{ groups: GroupLite[] }>('/api/groups').catch(() => ({ groups: [] as GroupLite[] })),
+   382→        api<{ drafts: Array<{ peerId: string; isGroup: boolean; content: string; updatedAt: string }> }>(
+   383→          '/api/messages/drafts'
+   384→        ).catch(() => ({ drafts: [] as Array<{ peerId: string; isGroup: boolean; content: string; updatedAt: string }> })),
+   385→      ])
+   386→      setConversations(c.conversations)
+   387→      setArchivedConvs(c.archived)
+   388→      setGroups(g.groups)
+   389→      const draftMap = new Map<string, string>()
+   390→      for (const draft of d.drafts) {
+   391→        if (draft.content) draftMap.set(draft.peerId, draft.content)
+   392→      }
+   393→      setDrafts(draftMap)
+   394→    } catch (e: any) {
+   395→      toast.error(e?.message || 'Failed to load')
+   396→    } finally {
+   397→      setLoading(false)
+   398→    }
+   399→  }, [])
+   400→
+   401→  useEffect(() => {
+   402→    load()
+   403→  }, [load])
+   404→
+   405→  // realtime: refresh lastMessage + unread when a new message arrives
+   406→  useEffect(() => {
+   407→    if (!socket || !meId) return
+   408→    const onNew = (raw: any) => {
+   409→      if (!raw || raw.groupId) return
+   410→      const peerId = raw.senderId === meId ? raw.receiverId : raw.senderId
+   411→      if (!peerId) return
+   412→      setConversations((prev) => {
+   413→        const exists = prev.find((c) => c.id === peerId)
+   414→        const lm = {
+   415→          content: raw.content || '',
+   416→          type: raw.type || 'text',
+   417→          senderId: raw.senderId,
+   418→          createdAt: toISO(raw.createdAt),
+   419→          status: raw.status || 'SENT',
+   420→        }
+   421→        const unreadInc = raw.receiverId === meId ? 1 : 0
+   422→        if (exists) {
+   423→          const updated: Conversation = {
+   424→            ...exists,
+   425→            lastMessage: lm,
+   426→            unread: exists.unread + unreadInc,
+   427→          }
+   428→          return [updated, ...prev.filter((c) => c.id !== peerId)]
+   429→        }
+   430→        // unknown peer — refetch to populate name/photo
+   431→        load()
+   432→        return prev
+   433→      })
+   434→    }
+   435→    const onStatus = ({ id, status }: { id: string; status: string }) => {
+   436→      setConversations((prev) =>
+   437→        prev.map((c) =>
+   438→          c.lastMessage && c.lastMessage.senderId === meId && c.lastMessage.status !== status
+   439→            ? { ...c, lastMessage: { ...c.lastMessage, status } }
+   440→            : c
+   441→        )
+   442→      )
+   443→    }
+   444→    const onGroupNew = (raw: any) => {
+   445→      if (!raw?.groupId) return
+   446→      // bump group to top by re-fetching once (lightweight)
+   447→      load()
+   448→    }
+   449→    socket.on(RT.MESSAGE_NEW, onNew)
+   450→    socket.on(RT.MESSAGE_STATUS, onStatus as any)
+   451→    socket.on(RT.GROUP_MESSAGE_NEW, onGroupNew as any)
+   452→    return () => {
+   453→      socket.off(RT.MESSAGE_NEW, onNew)
+   454→      socket.off(RT.MESSAGE_STATUS, onStatus as any)
+   455→      socket.off(RT.GROUP_MESSAGE_NEW, onGroupNew as any)
+   456→    }
+   457→  }, [socket, meId, load])
+   458→
+   459→  // Round 7: typing-status in conversation list. Subscribe to both
+   460→  // typing:indicator (1:1 — keyed by userId) and group:typing:indicator
+   461→  // (keyed by `group:${groupId}`). Each "isTyping:true" event schedules a
+   462→  // 3s auto-expiry timer so a missed isTyping:false (e.g. the peer's socket
+   463→  // disconnected mid-typing) doesn't leave a stale "typing…" forever.
+   464→  // Filters out the user's own id (the server already excludes the typer
+   465→  // for group events; for 1:1 the typing:indicator is emitted to the
+   466→  // receiver only, but the check is harmless + defensive).
+   467→  useEffect(() => {
+   468→    if (!socket || !meId) return
+   469→
+   470→    const clearTyping = (key: string) => {
+   471→      setTypingConvs((prev) => {
+   472→        if (!prev.has(key)) return prev
+   473→        const next = new Set(prev)
+   474→        next.delete(key)
+   475→        return next
+   476→      })
+   477→    }
+   478→
+   479→    const scheduleExpiry = (key: string) => {
+   480→      const timers = typingTimersRef.current
+   481→      const existing = timers.get(key)
+   482→      if (existing) clearTimeout(existing)
+   483→      const t = setTimeout(() => {
+   484→        timers.delete(key)
+   485→        clearTyping(key)
+   486→      }, 3000)
+   487→      timers.set(key, t)
+   488→    }
+   489→
+   490→    const onTyping = ({ userId, isTyping }: { userId: string; isTyping: boolean }) => {
+   491→      if (!userId || userId === meId) return
+   492→      if (isTyping) {
+   493→        setTypingConvs((prev) => {
+   494→          if (prev.has(userId)) return prev
+   495→          const next = new Set(prev)
+   496→          next.add(userId)
+   497→          return next
+   498→        })
+   499→        scheduleExpiry(userId)
+   500→      } else {
+   501→        const t = typingTimersRef.current.get(userId)
+   502→        if (t) {
+   503→          clearTimeout(t)
+   504→          typingTimersRef.current.delete(userId)
+   505→        }
+   506→        clearTyping(userId)
+   507→      }
+   508→    }
+   509→
+   510→    const onGroupTyping = ({
+   511→      groupId,
+   512→      userId,
+   513→      isTyping,
+   514→    }: {
+   515→      groupId: string
+   516→      userId: string
+   517→      isTyping: boolean
+   518→    }) => {
+   519→      if (!groupId || userId === meId) return
+   520→      const key = `group:${groupId}`
+   521→      if (isTyping) {
+   522→        setTypingConvs((prev) => {
+   523→          if (prev.has(key)) return prev
+   524→          const next = new Set(prev)
+   525→          next.add(key)
+   526→          return next
+   527→        })
+   528→        scheduleExpiry(key)
+   529→      } else {
+   530→        const t = typingTimersRef.current.get(key)
+   531→        if (t) {
+   532→          clearTimeout(t)
+   533→          typingTimersRef.current.delete(key)
+   534→        }
+   535→        clearTyping(key)
+   536→      }
+   537→    }
+   538→
+   539→    socket.on(RT.TYPING_INDICATOR, onTyping)
+   540→    socket.on(RT.GROUP_TYPING_INDICATOR, onGroupTyping)
+   541→    return () => {
+   542→      socket.off(RT.TYPING_INDICATOR, onTyping)
+   543→      socket.off(RT.GROUP_TYPING_INDICATOR, onGroupTyping)
+   544→      typingTimersRef.current.forEach((t) => clearTimeout(t))
+   545→      typingTimersRef.current.clear()
+   546→    }
+   547→  }, [socket, meId])
+   548→
+   549→  // Round 6: global message search — debounced 400ms after the user stops
+   550→  // typing. Fires GET /api/messages/search?q=QUERY and renders the results in
+   551→  // the search dropdown alongside the local conversation filter. The effect
+   552→  // cleanup clears the timer on every query change so only the latest query
+   553→  // triggers a request. Empty query → empty results (no API call).
+   554→  useEffect(() => {
+   555→    const qq = query.trim()
+   556→    if (!qq) {
+   557→      setGlobalResults([])
+   558→      setGlobalLoading(false)
+   559→      return
+   560→    }
+   561→    setGlobalLoading(true)
+   562→    if (globalSearchTimerRef.current) {
+   563→      clearTimeout(globalSearchTimerRef.current)
+   564→      globalSearchTimerRef.current = null
+   565→    }
+   566→    globalSearchTimerRef.current = setTimeout(async () => {
+   567→      try {
+   568→        const d = await api<{ results: GlobalSearchResult[] }>(
+   569→          `/api/messages/search?q=${encodeURIComponent(qq)}`
+   570→        )
+   571→        setGlobalResults(d.results || [])
+   572→      } catch {
+   573→        setGlobalResults([])
+   574→      } finally {
+   575→        setGlobalLoading(false)
+   576→      }
+   577→    }, 400)
+   578→    return () => {
+   579→      if (globalSearchTimerRef.current) {
+   580→        clearTimeout(globalSearchTimerRef.current)
+   581→        globalSearchTimerRef.current = null
+   582→      }
+   583→    }
+   584→  }, [query])
+   585→
+   586→  const q = query.trim().toLowerCase()
+   587→  const filteredConvs = q
+   588→    ? conversations.filter((c) => c.name.toLowerCase().includes(q) || c.username.toLowerCase().includes(q))
+   589→    : conversations
+   590→  const filteredArchived = q
+   591→    ? archivedConvs.filter((c) => c.name.toLowerCase().includes(q) || c.username.toLowerCase().includes(q))
+   592→    : archivedConvs
+   593→  const filteredGroups = q
+   594→    ? groups.filter((g) => g.name.toLowerCase().includes(q) || (g.description || '').toLowerCase().includes(q))
+   595→    : groups
+   596→
+   597→  const totalUnread = conversations.reduce((s, c) => s + c.unread, 0)
+   598→
+   599→  // ---- archive / unarchive a conversation (optimistic + API + toast) ----
+   600→  const handleToggleArchive = useCallback(
+   601→    async (c: Conversation, currentlyArchived: boolean) => {
+   602→      const nextArchived = !currentlyArchived
+   603→      // Optimistic move between active/archived arrays
+   604→      if (nextArchived) {
+   605→        setConversations((prev) => prev.filter((x) => x.id !== c.id))
+   606→        setArchivedConvs((prev) => [{ ...c, archived: true }, ...prev])
+   607→      } else {
+   608→        setArchivedConvs((prev) => prev.filter((x) => x.id !== c.id))
+   609→        setConversations((prev) => [...prev, { ...c, archived: false }])
+   610→      }
+   611→      try {
+   612→        await api('/api/messages/preferences', {
+   613→          method: 'POST',
+   614→          body: JSON.stringify({ peerId: c.id, archived: nextArchived }),
+   615→        })
+   616→        toast.success(nextArchived ? 'Chat archived' : 'Chat unarchived')
+   617→      } catch (e: any) {
+   618→        toast.error(e?.message || 'Failed to update archive')
+   619→        load()
+   620→      }
+   621→    },
+   622→    [load]
+   623→  )
+   624→
+   625→  return (
+   626→    <div className="flex h-full flex-col">
+   627→      <div className="border-b border-border px-4 py-3">
+   628→        <div className="mb-3 flex items-center justify-between">
+   629→          <h1 className="text-xl font-bold">Chats</h1>
+   630→          {totalUnread > 0 && (
+   631→            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
+   632→              {totalUnread} unread
+   633→            </span>
+   634→          )}
+   635→        </div>
+   636→        <div className="relative">
+   637→          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+   638→          <Input
+   639→            value={query}
+   640→            onChange={(e) => setQuery(e.target.value)}
+   641→            placeholder="Search chats and messages"
+   642→            className="rounded-xl pl-9 pr-9"
+   643→          />
+   644→          {query && (
+   645→            <button
+   646→              type="button"
+   647→              onClick={() => setQuery('')}
+   648→              className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-foreground"
+   649→              aria-label="Clear search"
+   650→            >
+   651→              <X size={14} />
+   652→            </button>
+   653→          )}
+   654→        </div>
+   655→      </div>
+   656→
+   657→      {/* Round 6: when the search box has text, replace the chat/group tabs
+   658→          with a unified search dropdown that shows TWO sections — the local
+   659→          conversation filter (chats + groups whose name matches) AND global
+   660→          message search results (GET /api/messages/search?q=...). Each result
+   661→          row is tappable and routes the user into the right conversation. */}
+   662→      {query.trim() ? (
+   663→        <div className="fc-scroll flex-1 overflow-y-auto p-2">
+   664→          {/* Conversations section */}
+   665→          {(filteredConvs.length > 0 || filteredGroups.length > 0) && (
+   666→            <div className="mb-2">
+   667→              <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+   668→                Conversations
+   669→              </div>
+   670→              {filteredConvs.slice(0, 5).map((c) => (
+   671→                <button
+   672→                  key={c.id}
+   673→                  type="button"
+   674→                  onClick={() => {
+   675→                    openChat(c.id)
+   676→                    setQuery('')
+   677→                  }}
+   678→                  className="flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition hover:bg-accent/40"
+   679→                >
+   680→                  <UserAvatar name={c.name} src={c.photoUrl} size={40} online={isOnline(c.id)} />
+   681→                  <div className="min-w-0 flex-1">
+   682→                    <div className="truncate text-sm font-medium">{c.name}</div>
+   683→                    <div className="truncate text-xs text-muted-foreground">@{c.username}</div>
+   684→                  </div>
+   685→                </button>
+   686→              ))}
+   687→              {filteredGroups.slice(0, 5).map((g) => (
+   688→                <button
+   689→                  key={g.id}
+   690→                  type="button"
+   691→                  onClick={() => {
+   692→                    openGroupChat(g.id)
+   693→                    setQuery('')
+   694→                  }}
+   695→                  className="flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition hover:bg-accent/40"
+   696→                >
+   697→                  {g.photoUrl ? (
+   698→                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full ring-1 ring-border">
+   699→                      <img src={g.photoUrl} alt={g.name} className="h-full w-full object-cover" />
+   700→                    </div>
+   701→                  ) : (
+   702→                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/15 text-primary ring-1 ring-border">
+   703→                      <Users size={18} />
+   704→                    </div>
+   705→                  )}
+   706→                  <div className="min-w-0 flex-1">
+   707→                    <div className="truncate text-sm font-medium">{g.name}</div>
+   708→                    <div className="truncate text-xs text-muted-foreground">
+   709→                      {g.memberCount} {g.memberCount === 1 ? 'member' : 'members'}
+   710→                    </div>
+   711→                  </div>
+   712→                </button>
+   713→              ))}
+   714→            </div>
+   715→          )}
+   716→
+   717→          {/* Messages section (global search) */}
+   718→          <div>
+   719→            <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+   720→              <MessageSquare size={11} />
+   721→              Messages
+   722→            </div>
+   723→            {globalLoading ? (
+   724→              <div className="flex justify-center py-4">
+   725→                <Loader2 className="animate-spin text-muted-foreground" size={16} />
+   726→              </div>
+   727→            ) : globalResults.length === 0 ? (
+   728→              <div className="px-2 py-3 text-center text-xs text-muted-foreground">
+   729→                No messages found
+   730→              </div>
+   731→            ) : (
+   732→              globalResults.map((r) => (
+   733→                <button
+   734→                  key={r.messageId}
+   735→                  type="button"
+   736→                  onClick={() => {
+   737→                    if (r.conversationType === 'direct' && r.peerId) {
+   738→                      openChat(r.peerId)
+   739→                    } else if (r.conversationType === 'group' && r.groupId) {
+   740→                      openGroupChat(r.groupId)
+   741→                    }
+   742→                    setQuery('')
+   743→                  }}
+   744→                  className="flex w-full items-start gap-2.5 rounded-xl p-2.5 text-left transition hover:bg-accent/40"
+   745→                >
+   746→                  <MessageSquare size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
+   747→                  <div className="min-w-0 flex-1">
+   748→                    <div className="line-clamp-2 text-sm">
+   749→                      {highlight(r.content || '', query.trim())}
+   750→                    </div>
+   751→                    <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+   752→                      <span className="truncate">{r.senderName || 'Unknown'}</span>
+   753→                      <span className="shrink-0">·</span>
+   754→                      <span className="truncate">
+   755→                        {r.conversationType === 'direct' ? r.peerName || 'Direct' : r.groupName || 'Group'}
+   756→                      </span>
+   757→                      <span className="shrink-0">·</span>
+   758→                      <span className="shrink-0">{timeAgo(r.createdAt)}</span>
+   759→                    </div>
+   760→                  </div>
+   761→                </button>
+   762→              ))
+   763→            )}
+   764→          </div>
+   765→
+   766→          {/* Empty state when nothing matches at all */}
+   767→          {!loading &&
+   768→            filteredConvs.length === 0 &&
+   769→            filteredGroups.length === 0 &&
+   770→            !globalLoading &&
+   771→            globalResults.length === 0 && (
+   772→              <div className="py-8">
+   773→                <EmptyState
+   774→                  icon={<Search size={36} />}
+   775→                  title="No results"
+   776→                  description={`Nothing matches "${query.trim()}" in your chats or messages.`}
+   777→                />
+   778→              </div>
+   779→            )}
+   780→        </div>
+   781→      ) : (
+   782→      <Tabs value={tab} onValueChange={(v) => setTab(v as 'chats' | 'groups')} className="flex flex-1 flex-col overflow-hidden">
+   783→        <TabsList className="mx-4 mt-3 grid grid-cols-2 rounded-xl">
+   784→          <TabsTrigger value="chats" className="text-xs">
+   785→            Chats
+   786→            {totalUnread > 0 && (
+   787→              <span className="ml-1 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
+   788→                {totalUnread > 9 ? '9+' : totalUnread}
+   789→              </span>
+   790→            )}
+   791→          </TabsTrigger>
+   792→          <TabsTrigger value="groups" className="text-xs">
+   793→            Groups
+   794→            {groups.length > 0 && (
+   795→              <span className="ml-1 text-[10px] font-normal text-muted-foreground">{groups.length}</span>
+   796→            )}
+   797→          </TabsTrigger>
+   798→        </TabsList>
+   799→
+   800→        <TabsContent value="chats" className="fc-scroll m-0 flex-1 overflow-y-auto p-2">
+   801→          {loading ? (
+   802→            <div className="space-y-1 p-2">
+   803→              {[0, 1, 2, 3, 4].map((i) => (
+   804→                <ConvRowSkeleton key={i} />
+   805→              ))}
+   806→            </div>
+   807→          ) : filteredConvs.length === 0 && filteredArchived.length === 0 ? (
+   808→            <EmptyState
+   809→              icon={<MessageCircle size={36} />}
+   810→              title={q ? 'No matching chats' : 'No conversations yet'}
+   811→              description={q ? 'Try a different search.' : 'Add a friend and say hello to start chatting.'}
+   812→            />
+   813→          ) : (
+   814→            <div className="space-y-0.5">
+   815→              {filteredConvs.map((c) => (
+   816→                <ConversationRow
+   817→                  key={c.id}
+   818→                  conversation={c}
+   819→                  online={isOnline(c.id)}
+   820→                  meId={meId}
+   821→                  draftPreview={drafts.get(c.id)}
+   822→                  isTyping={typingConvs.has(c.id)}
+   823→                  onOpen={() => openChat(c.id)}
+   824→                  onTogglePin={async () => {
+   825→                    try {
+   826→                      await api('/api/messages/preferences', { method: 'POST', body: JSON.stringify({ peerId: c.id, pinned: !c.pinned }) })
+   827→                      setConversations((prev) => prev.map((x) => (x.id === c.id ? { ...x, pinned: !x.pinned } : x)))
+   828→                    } catch (e: any) { toast.error(e.message) }
+   829→                  }}
+   830→                  onToggleMute={async () => {
+   831→                    try {
+   832→                      await api('/api/messages/preferences', { method: 'POST', body: JSON.stringify({ peerId: c.id, muted: !c.muted }) })
+   833→                      setConversations((prev) => prev.map((x) => (x.id === c.id ? { ...x, muted: !x.muted } : x)))
+   834→                    } catch (e: any) { toast.error(e.message) }
+   835→                  }}
+   836→                  onToggleArchive={() => handleToggleArchive(c, false)}
+   837→                />
+   838→              ))}
+   839→
+   840→              {/* Archived section (collapsed by default) */}
+   841→              {filteredArchived.length > 0 && (
+   842→                <div className="mt-4">
+   843→                  <button
+   844→                    type="button"
+   845→                    onClick={() => setArchivedExpanded((v) => !v)}
+   846→                    className="flex w-full items-center gap-1.5 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition hover:text-foreground"
+   847→                    aria-expanded={archivedExpanded}
+   848→                    aria-controls="archived-chats-list"
+   849→                  >
+   850→                    {archivedExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+   851→                    Archived ({filteredArchived.length})
+   852→                  </button>
+   853→                  {archivedExpanded && (
+   854→                    <div id="archived-chats-list" className="space-y-0.5">
+   855→                      {filteredArchived.map((c) => (
+   856→                        <ConversationRow
+   857→                          key={c.id}
+   858→                          conversation={c}
+   859→                          online={isOnline(c.id)}
+   860→                          meId={meId}
+   861→                          draftPreview={drafts.get(c.id)}
+   862→                          isTyping={typingConvs.has(c.id)}
+   863→                          archived
+   864→                          onOpen={() => openChat(c.id)}
+   865→                          onTogglePin={async () => {
+   866→                            try {
+   867→                              await api('/api/messages/preferences', { method: 'POST', body: JSON.stringify({ peerId: c.id, pinned: !c.pinned }) })
+   868→                              setArchivedConvs((prev) => prev.map((x) => (x.id === c.id ? { ...x, pinned: !x.pinned } : x)))
+   869→                            } catch (e: any) { toast.error(e.message) }
+   870→                          }}
+   871→                          onToggleMute={async () => {
+   872→                            try {
+   873→                              await api('/api/messages/preferences', { method: 'POST', body: JSON.stringify({ peerId: c.id, muted: !c.muted }) })
+   874→                              setArchivedConvs((prev) => prev.map((x) => (x.id === c.id ? { ...x, muted: !x.muted } : x)))
+   875→                            } catch (e: any) { toast.error(e.message) }
+   876→                          }}
+   877→                          onToggleArchive={() => handleToggleArchive(c, true)}
+   878→                        />
+   879→                      ))}
+   880→                    </div>
+   881→                  )}
+   882→                </div>
+   883→              )}
+   884→            </div>
+   885→          )}
+   886→        </TabsContent>
+   887→
+   888→        <TabsContent value="groups" className="fc-scroll m-0 flex-1 overflow-y-auto p-2">
+   889→          {loading ? (
+   890→            <div className="space-y-1 p-2">
+   891→              {[0, 1, 2, 3].map((i) => (
+   892→                <ConvRowSkeleton key={i} />
+   893→              ))}
+   894→            </div>
+   895→          ) : filteredGroups.length === 0 ? (
+   896→            <EmptyState
+   897→              icon={<Users size={36} />}
+   898→              title={q ? 'No matching groups' : 'No groups yet'}
+   899→              description={q ? 'Try a different search.' : 'Create a group from the Groups tab to chat with multiple friends.'}
+   900→            />
+   901→          ) : (
+   902→            <div className="space-y-0.5">
+   903→              {filteredGroups.map((g) => (
+   904→                <GroupRow
+   905→                  key={g.id}
+   906→                  group={g}
+   907→                  isTyping={typingConvs.has(`group:${g.id}`)}
+   908→                  onOpen={() => openGroupChat(g.id)}
+   909→                />
+   910→              ))}
+   911→            </div>
+   912→          )}
+   913→        </TabsContent>
+   914→      </Tabs>
+   915→      )}
+   916→    </div>
+   917→  )
+   918→}
+   919→
+   920→function ConversationRow({
+   921→  conversation,
+   922→  online,
+   923→  meId,
+   924→  draftPreview,
+   925→  isTyping,
+   926→  archived,
+   927→  onOpen,
+   928→  onTogglePin,
+   929→  onToggleMute,
+   930→  onToggleArchive,
+   931→}: {
+   932→  conversation: Conversation
+   933→  online: boolean
+   934→  meId?: string
+   935→  draftPreview?: string
+   936→  isTyping?: boolean
+   937→  archived?: boolean
+   938→  onOpen: () => void
+   939→  onTogglePin: () => void
+   940→  onToggleMute: () => void
+   941→  onToggleArchive: () => void
+   942→}) {
+   943→  const [menuOpen, setMenuOpen] = useState(false)
+   944→  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+   945→  const [pinned, setPinned] = useState(!!conversation.pinned)
+   946→  const [muted, setMuted] = useState(!!conversation.muted)
+   947→
+   948→  useEffect(() => {
+   949→    setPinned(!!conversation.pinned)
+   950→    setMuted(!!conversation.muted)
+   951→  }, [conversation.pinned, conversation.muted])
+   952→
+   953→  const startPress = () => {
+   954→    pressTimer.current = setTimeout(() => setMenuOpen(true), 500)
+   955→  }
+   956→  const cancelPress = () => {
+   957→    if (pressTimer.current) clearTimeout(pressTimer.current)
+   958→  }
+   959→
+   960→  return (
+   961→    <div className="relative">
+   962→      <button
+   963→        onClick={onOpen}
+   964→        onPointerDown={startPress}
+   965→        onPointerUp={cancelPress}
+   966→        onPointerLeave={cancelPress}
+   967→        className={cn(
+   968→          'flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition-colors hover:bg-accent/50',
+   969→          pinned && 'bg-primary/5',
+   970→          archived && 'opacity-70'
+   971→        )}
+   972→      >
+   973→        <UserAvatar name={conversation.name} src={conversation.photoUrl} size={48} online={online} />
+   974→        <div className="min-w-0 flex-1">
+   975→          <div className="flex items-baseline justify-between gap-2">
+   976→            <span className="flex min-w-0 items-center gap-1 truncate text-sm font-semibold">
+   977→              <span className="truncate">{conversation.name}</span>
+   978→              {pinned && <Pin size={11} className="shrink-0 text-primary" />}
+   979→              {muted && <BellOff size={11} className="shrink-0 text-muted-foreground" />}
+   980→              {archived && <Archive size={11} className="shrink-0 text-muted-foreground" />}
+   981→            </span>
+   982→            {conversation.lastMessage && (
+   983→              <span className="shrink-0 text-[10px] text-muted-foreground">
+   984→                {timeAgo(conversation.lastMessage.createdAt)}
+   985→              </span>
+   986→            )}
+   987→          </div>
+   988→          {isTyping ? (
+   989→            // Round 7: typing-status takes priority over both draft +
+   990→            // last-message preview — it's the most time-sensitive info
+   991→            // ("the peer is about to send a message"). Unread badge still
+   992→            // shows alongside.
+   993→            <div className="mt-0.5 flex items-center justify-between gap-2">
+   994→              <span className="truncate text-xs italic text-primary">typing…</span>
+   995→              {conversation.unread > 0 && (
+   996→                <span
+   997→                  className={cn(
+   998→                    'grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 text-[10px] font-bold',
+   999→                    muted ? 'bg-muted text-muted-foreground' : 'bg-primary text-primary-foreground'
+  1000→                  )}
+  1001→                >
+  1002→                  {conversation.unread > 9 ? '9+' : conversation.unread}
+  1003→                </span>
+  1004→              )}
+  1005→            </div>
+  1006→          ) : draftPreview ? (
+  1007→            // Draft indicator takes priority over the last-message preview so
+  1008→            // the user sees their unsaved text at a glance.
+  1009→            <div className="mt-0.5 flex items-center justify-between gap-2">
+  1010→              <span className="flex min-w-0 items-center gap-1 truncate text-xs text-primary">
+  1011→                <Pencil size={11} className="shrink-0" />
+  1012→                <span className="truncate">Draft: {draftPreview}</span>
+  1013→              </span>
+  1014→              {conversation.unread > 0 && (
+  1015→                <span
+  1016→                  className={cn(
+  1017→                    'grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 text-[10px] font-bold',
+  1018→                    muted ? 'bg-muted text-muted-foreground' : 'bg-primary text-primary-foreground'
+  1019→                  )}
+  1020→                >
+  1021→                  {conversation.unread > 9 ? '9+' : conversation.unread}
+  1022→                </span>
+  1023→              )}
+  1024→            </div>
+  1025→          ) : (
+  1026→            <div className="flex items-center justify-between gap-2">
+  1027→              <span
+  1028→                className={cn(
+  1029→                  'truncate text-xs',
+  1030→                  conversation.unread > 0 && !muted ? 'font-medium text-foreground' : 'text-muted-foreground'
+  1031→                )}
+  1032→              >
+  1033→                {lastMessagePreview(conversation, meId)}
+  1034→              </span>
+  1035→              {conversation.unread > 0 && (
+  1036→                <span
+  1037→                  className={cn(
+  1038→                    'grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 text-[10px] font-bold',
+  1039→                    muted ? 'bg-muted text-muted-foreground' : 'bg-primary text-primary-foreground'
+  1040→                  )}
+  1041→                >
+  1042→                  {conversation.unread > 9 ? '9+' : conversation.unread}
+  1043→                </span>
+  1044→              )}
+  1045→            </div>
+  1046→          )}
+  1047→        </div>
+  1048→      </button>
+  1049→      {menuOpen && (
+  1050→        <>
+  1051→          <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
+  1052→          <div className="absolute right-2 top-12 z-30 w-44 overflow-hidden rounded-xl border border-border bg-popover p-1 shadow-xl fc-rise">
+  1053→            <button
+  1054→              onClick={() => { onTogglePin(); setPinned((p) => !p); setMenuOpen(false) }}
+  1055→              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-accent"
+  1056→            >
+  1057→              <Pin size={14} /> {pinned ? 'Unpin chat' : 'Pin chat'}
+  1058→            </button>
+  1059→            <button
+  1060→              onClick={() => { onToggleMute(); setMuted((m) => !m); setMenuOpen(false) }}
+  1061→              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-accent"
+  1062→            >
+  1063→              {muted ? <Bell size={14} /> : <BellOff size={14} />} {muted ? 'Unmute' : 'Mute notifications'}
+  1064→            </button>
+  1065→            <button
+  1066→              onClick={() => { onToggleArchive(); setMenuOpen(false) }}
+  1067→              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-accent"
+  1068→            >
+  1069→              {archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+  1070→              {archived ? 'Unarchive' : 'Archive chat'}
+  1071→            </button>
+  1072→          </div>
+  1073→        </>
+  1074→      )}
+  1075→    </div>
+  1076→  )
+  1077→}
+  1078→
+  1079→function GroupRow({
+  1080→  group,
+  1081→  isTyping,
+  1082→  onOpen,
+  1083→}: {
+  1084→  group: GroupLite
+  1085→  isTyping?: boolean
+  1086→  onOpen: () => void
+  1087→}) {
+  1088→  return (
+  1089→    <button
+  1090→      onClick={onOpen}
+  1091→      className="flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition-colors hover:bg-accent/50"
+  1092→    >
+  1093→      {group.photoUrl ? (
+  1094→        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full ring-1 ring-border">
+  1095→          <img src={group.photoUrl} alt={group.name} className="h-full w-full object-cover" />
+  1096→        </div>
+  1097→      ) : (
+  1098→        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-primary/15 text-primary ring-1 ring-border">
+  1099→          <Users size={22} />
+  1100→        </div>
+  1101→      )}
+  1102→      <div className="min-w-0 flex-1">
+  1103→        <div className="flex items-baseline justify-between gap-2">
+  1104→          <span className="truncate text-sm font-semibold">{group.name}</span>
+  1105→          <span className="shrink-0 text-[10px] text-muted-foreground">{timeAgo(group.createdAt)}</span>
+  1106→        </div>
+  1107→        {isTyping ? (
+  1108→          // Round 7: someone in this group is typing — show "Someone is
+  1109→          // typing…" in place of the member-count subtitle.
+  1110→          <div className="truncate text-xs italic text-primary">Someone is typing…</div>
+  1111→        ) : (
+  1112→          <div className="truncate text-xs text-muted-foreground">
+  1113→            {group.memberCount} {group.memberCount === 1 ? 'member' : 'members'}
+  1114→            {group.description ? ` · ${group.description}` : ''}
+  1115→          </div>
+  1116→        )}
+  1117→      </div>
+  1118→    </button>
+  1119→  )
+  1120→}
+  1121→
+  1122→function ConvRowSkeleton() {
+  1123→  return (
+  1124→    <div className="flex items-center gap-3 rounded-xl p-2.5">
+  1125→      <div className="h-12 w-12 shrink-0 animate-pulse rounded-full bg-muted" />
+  1126→      <div className="flex-1 space-y-2">
+  1127→        <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
+  1128→        <div className="h-3 w-3/4 animate-pulse rounded bg-muted" />
+  1129→      </div>
+  1130→    </div>
+  1131→  )
+  1132→}
+  1133→
+  1134→// ---------------- chat room (direct + group) ----------------
+  1135→function ChatRoom({
+  1136→  mode,
+  1137→  peerId,
+  1138→  onBack,
+  1139→}: {
+  1140→  mode: 'direct' | 'group'
+  1141→  peerId: string
+  1142→  onBack: () => void
+  1143→}) {
+  1144→  const { user: me } = useAuth()
+  1145→  const { socket, isOnline } = useSocket()
+  1146→  const [messages, setMessages] = useState<Message[]>([])
+  1147→  const [peerInfo, setPeerInfo] = useState<PeerInfo | null>(null)
+  1148→  const [loading, setLoading] = useState(true)
+  1149→  const [text, setText] = useState('')
+  1150→  const [peerTyping, setPeerTyping] = useState(false)
+  1151→  const [uploading, setUploading] = useState(false)
+  1152→  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  1153→  const [loadingOlder, setLoadingOlder] = useState(false)
+  1154→  const [hasMore, setHasMore] = useState(true)
+  1155→  const [searchQuery, setSearchQuery] = useState('')
+  1156→  const [searchOpen, setSearchOpen] = useState(false)
+  1157→  const [recording, setRecording] = useState(false)
+  1158→  const [recordSecs, setRecordSecs] = useState(0)
+  1159→  const [deleteTarget, setDeleteTarget] = useState<Message | null>(null)
+  1160→  const [forwardTarget, setForwardTarget] = useState<Message | null>(null)
+  1161→  const [editTarget, setEditTarget] = useState<Message | null>(null)
+  1162→  // Round 7: reply-with-quote. When set, a reply preview bar renders above
+  1163→  // the input bar (sender name + truncated content + X to cancel) and the
+  1164→  // next sent message includes `replyToId: replyTo.id`. Cleared on send,
+  1165→  // on X-tap, and on peerId-change (so a stale reply target from a previous
+  1166→  // chat doesn't bleed across).
+  1167→  const [replyTo, setReplyTo] = useState<Message | null>(null)
+  1168→  // Round 8: scheduled-message composer + viewer state. The composer opens
+  1169→  // via the clock icon in the input bar (prefilled with the current draft
+  1170→  // text) and POSTs to /api/messages/scheduled with scheduledFor in the
+  1171→  // future (stored but NOT delivered — a future cron enhancement will emit
+  1172→  // the message when its time arrives). The viewer lists scheduled messages
+  1173→  // for the current conversation and supports cancellation.
+  1174→  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
+  1175→  const [scheduledViewerOpen, setScheduledViewerOpen] = useState(false)
+  1176→  const [settingsOpen, setSettingsOpen] = useState(false)
+  1177→  const [starredDialogOpen, setStarredDialogOpen] = useState(false)
+  1178→  const [disappearing, setDisappearing] = useState<'OFF' | '24H' | '7D'>('OFF')
+  1179→  const [wallpaper, setWallpaper] = useState<string | null>(null)
+  1180→  // Group typing (sender-aware): set of userIds currently typing in this group
+  1181→  // chat (excludes me — the realtime service emits to everyone *but* the typer,
+  1182→  // and we filter again here for safety). Reset to empty when peerId changes.
+  1183→  const [groupTypingUsers, setGroupTypingUsers] = useState<Set<string>>(new Set())
+  1184→  // Member names lookup for the group typing indicator ("Aria is typing…").
+  1185→  // Built once per group chat open via GET /api/groups/:id.
+  1186→  const [groupMembers, setGroupMembers] = useState<Map<string, string>>(new Map())
+  1187→  // Derived count of group members currently typing (defined here so the
+  1188→  // auto-scroll effect below can reference it without a temporal-dead-zone error).
+  1189→  const groupTypingCount = groupTypingUsers.size
+  1190→  // Round 6: per-user message pin (1:1 only). Derived here — BEFORE the
+  1191→  // auto-scroll effect below — so any effect/handler that references it is
+  1192→  // safe from temporal-dead-zone errors. The backend enforces "only one
+  1193→  // pinned message per 1:1 conversation per user", so we find the first
+  1194→  // (only) message pinned by me in the current conversation, excluding
+  1195→  // deleted-for-me/everyone messages (a deleted pinned message shouldn't
+  1196→  // surface in the pin bar). null in group mode or when nothing is pinned.
+  1197→  // NOTE: pinnedMessage is defined AFTER meId below to avoid a temporal-dead-zone error.
+  1198→
+  1199→  const scrollRef = useRef<HTMLDivElement>(null)
+  1200→  const bottomRef = useRef<HTMLDivElement>(null)
+  1201→  const fileInputRef = useRef<HTMLInputElement>(null)
+  1202→  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  1203→  const atBottomRef = useRef(true)
+  1204→  const oldestTsRef = useRef<string | null>(null)
+  1205→  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  1206→  const recordedChunksRef = useRef<Blob[]>([])
+  1207→  const recordStreamRef = useRef<MediaStream | null>(null)
+  1208→  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  1209→  const prevHeightRef = useRef(0)
+  1210→  const skipAutoScrollRef = useRef(false)
+  1211→  // Draft auto-save: a ref mirror of `text` so the peerId-change cleanup can
+  1212→  // read the *current* text without a stale closure, and a debounce timer.
+  1213→  const textRef = useRef('')
+  1214→  const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  1215→  const meId = me?.id
+  1216→
+  1217→  // Round 6: per-user message pin (1:1 only). Defined AFTER meId to avoid a
+  1218→  // temporal-dead-zone error. Finds the message pinned by me in this conversation.
+  1219→  const pinnedMessage =
+  1220→    mode === 'direct' && meId
+  1221→      ? messages.find((m) => m.pinnedBy === meId && !isDeletedForMe(m, meId)) || null
+  1222→      : null
+  1223→
+  1224→  // keep textRef in sync with `text` (so cleanup reads the latest typed value)
+  1225→  useEffect(() => {
+  1226→    textRef.current = text
+  1227→  }, [text])
+  1228→
+  1229→  // ---- load history + peer info ----
+  1230→  useEffect(() => {
+  1231→    let cancelled = false
+  1232→    setLoading(true)
+  1233→    setMessages([])
+  1234→    setHasMore(true)
+  1235→    setPeerTyping(false)
+  1236→    setPeerInfo(null)
+  1237→    // Reset group typing state for the new conversation (so a stale "X is
+  1238→    // typing…" indicator doesn't bleed across chats when switching rooms).
+  1239→    setGroupTypingUsers(new Set())
+  1240→    // Round 7: clear any in-progress reply target when switching rooms.
+  1241→    setReplyTo(null)
+  1242→    // Reset the input for the new conversation; the draft (if any) is restored
+  1243→    // below.
+  1244→    setText('')
+  1245→    // Cancel any pending draft autosave from the previous conversation.
+  1246→    if (draftSaveTimerRef.current) {
+  1247→      clearTimeout(draftSaveTimerRef.current)
+  1248→      draftSaveTimerRef.current = null
+  1249→    }
+  1250→    oldestTsRef.current = null
+  1251→    atBottomRef.current = true
+  1252→
+  1253→    const endpoint = `/api/messages?${mode === 'direct' ? 'userId' : 'groupId'}=${encodeURIComponent(peerId)}`
+  1254→
+  1255→    Promise.all([
+  1256→      api<{ messages: Message[] }>(endpoint)
+  1257→        .then((d) => d.messages)
+  1258→        .catch((e: any) => {
+  1259→          toast.error(e?.message || 'Failed to load messages')
+  1260→          return [] as Message[]
+  1261→        }),
+  1262→      mode === 'direct'
+  1263→        ? api<{ friends: Friend[] }>('/api/friends')
+  1264→            .then((d) => d.friends.find((f) => f.id === peerId) || null)
+  1265→            .then((friend): PeerInfo | null => {
+  1266→              if (friend) {
+  1267→                return {
+  1268→                  name: friend.name,
+  1269→                  photoUrl: friend.photoUrl,
+  1270→                  username: friend.username,
+  1271→                  lastSeen: friend.lastSeen,
+  1272→                }
+  1273→              }
+  1274→              // fallback to conversations endpoint (peer may not be a friend yet but has messages)
+  1275→              return api<{ conversations: Conversation[]; archived: Conversation[] }>('/api/messages/conversations')
+  1276→                .then((d) => {
+  1277→                  const c = d.conversations.find((c) => c.id === peerId) || d.archived.find((c) => c.id === peerId)
+  1278→                  return c
+  1279→                    ? { name: c.name, photoUrl: c.photoUrl, username: c.username, lastSeen: null }
+  1280→                    : null
+  1281→                })
+  1282→                .catch(() => null)
+  1283→            })
+  1284→            .catch(() => null)
+  1285→        : api<{ groups: GroupLite[] }>('/api/groups')
+  1286→            .then((d) => {
+  1287→              const g = d.groups.find((g) => g.id === peerId)
+  1288→              return g
+  1289→                ? { name: g.name, photoUrl: g.photoUrl, memberCount: g.memberCount }
+  1290→                : null
+  1291→            })
+  1292→            .catch(() => null),
+  1293→    ])
+  1294→      .then(([msgs, info]) => {
+  1295→        if (cancelled) return
+  1296→        const normalized = msgs.map(normalizeMessage)
+  1297→        setMessages(normalized)
+  1298→        if (normalized.length > 0) oldestTsRef.current = normalized[0].createdAt
+  1299→        if (normalized.length < 50) setHasMore(false)
+  1300→        if (info) setPeerInfo(info)
+  1301→      })
+  1302→      .finally(() => {
+  1303→        if (!cancelled) setLoading(false)
+  1304→      })
+  1305→
+  1306→    // Restore any saved draft for this peer (so the user picks up where they
+  1307→    // left off). isGroup is derived from `mode` for this same conversation.
+  1308→    const isGroup = mode === 'group'
+  1309→    api<{ draft: { content: string; updatedAt: string } | null }>(
+  1310→      `/api/messages/drafts?peerId=${encodeURIComponent(peerId)}&isGroup=${isGroup}`
+  1311→    )
+  1312→      .then((d) => {
+  1313→        if (cancelled) return
+  1314→        if (d.draft && d.draft.content) {
+  1315→          setText(d.draft.content)
+  1316→          toast.success('Draft restored', { duration: 1500 })
+  1317→        }
+  1318→      })
+  1319→      .catch(() => {})
+  1320→
+  1321→    return () => {
+  1322→      cancelled = true
+  1323→      // Save the draft one last time for the conversation we're leaving so it
+  1324→      // doesn't get lost. The closure captures the OLD peerId/mode; textRef
+  1325→      // holds the latest typed value at the moment of cleanup.
+  1326→      const leavingPeerId = peerId
+  1327→      const leavingIsGroup = isGroup
+  1328→      const content = textRef.current
+  1329→      if (draftSaveTimerRef.current) {
+  1330→        clearTimeout(draftSaveTimerRef.current)
+  1331→        draftSaveTimerRef.current = null
+  1332→      }
+  1333→      if (content.trim()) {
+  1334→        api('/api/messages/drafts', {
+  1335→          method: 'POST',
+  1336→          body: JSON.stringify({ peerId: leavingPeerId, isGroup: leavingIsGroup, content }),
+  1337→        }).catch(() => {})
+  1338→      }
+  1339→    }
+  1340→  }, [mode, peerId])
+  1341→
+  1342→  // ---- load chat preferences (disappearing + wallpaper) for this peer ----
+  1343→  useEffect(() => {
+  1344→    setDisappearing('OFF')
+  1345→    setWallpaper(null)
+  1346→    let cancelled = false
+  1347→    api<{ preferences: Array<{ peerId: string; disappearing: string; wallpaper: string | null }> }>(
+  1348→      '/api/messages/preferences'
+  1349→    )
+  1350→      .then((d) => {
+  1351→        if (cancelled) return
+  1352→        const p = d.preferences?.find((x) => x.peerId === peerId)
+  1353→        if (p) {
+  1354→          setDisappearing(p.disappearing === '24H' || p.disappearing === '7D' ? p.disappearing : 'OFF')
+  1355→          setWallpaper(p.wallpaper ?? null)
+  1356→        }
+  1357→      })
+  1358→      .catch(() => {})
+  1359→    return () => {
+  1360→      cancelled = true
+  1361→    }
+  1362→  }, [peerId])
+  1363→
+  1364→  // ---- fetch group members (userId → name) once on entering a group chat ----
+  1365→  // Used by the sender-aware group typing indicator to show "Aria is typing…"
+  1366→  // instead of a generic "Someone is typing…".
+  1367→  useEffect(() => {
+  1368→    if (mode !== 'group') {
+  1369→      setGroupMembers(new Map())
+  1370→      return
+  1371→    }
+  1372→    let cancelled = false
+  1373→    api<{
+  1374→      group: {
+  1375→        id: string
+  1376→        name: string
+  1377→        members: Array<{ id: string; name: string; username: string }>
+  1378→      }
+  1379→    }>(`/api/groups/${encodeURIComponent(peerId)}`)
+  1380→      .then((d) => {
+  1381→        if (cancelled) return
+  1382→        const map = new Map<string, string>()
+  1383→        for (const m of d.group?.members || []) {
+  1384→          map.set(m.id, m.name || m.username || 'Someone')
+  1385→        }
+  1386→        setGroupMembers(map)
+  1387→      })
+  1388→      .catch(() => {
+  1389→        // Non-fatal: typing indicator falls back to "Someone is typing…".
+  1390→      })
+  1391→    return () => {
+  1392→      cancelled = true
+  1393→    }
+  1394→  }, [mode, peerId])
+  1395→
+  1396→  // ---- jump to bottom after first load ----
+  1397→  useEffect(() => {
+  1398→    if (loading) return
+  1399→    const id = requestAnimationFrame(() => {
+  1400→      bottomRef.current?.scrollIntoView({ block: 'end' })
+  1401→    })
+  1402→    return () => cancelAnimationFrame(id)
+  1403→  }, [loading])
+  1404→
+  1405→  // ---- auto-scroll on new messages ----
+  1406→  useEffect(() => {
+  1407→    if (loading) return
+  1408→    if (skipAutoScrollRef.current) {
+  1409→      skipAutoScrollRef.current = false
+  1410→      return
+  1411→    }
+  1412→    if (loadingOlder) return
+  1413→    if (!atBottomRef.current) return
+  1414→    const id = requestAnimationFrame(() => {
+  1415→      bottomRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
+  1416→    })
+  1417→    return () => cancelAnimationFrame(id)
+  1418→  }, [messages.length, peerTyping, groupTypingCount, loading, loadingOlder])
+  1419→
+  1420→  // ---- socket subscriptions ----
+  1421→  useEffect(() => {
+  1422→    if (!socket || !meId) return
+  1423→
+  1424→    const isRelevant = (raw: any): boolean => {
+  1425→      if (!raw) return false
+  1426→      if (mode === 'direct') {
+  1427→        if (raw.groupId) return false
+  1428→        return (
+  1429→          (raw.senderId === peerId && raw.receiverId === meId) ||
+  1430→          (raw.senderId === meId && raw.receiverId === peerId)
+  1431→        )
+  1432→      }
+  1433→      return raw.groupId === peerId
+  1434→    }
+  1435→
+  1436→    const onNew = (raw: any) => {
+  1437→      if (!isRelevant(raw)) return
+  1438→      const msg = normalizeMessage(raw)
+  1439→      setMessages((prev) => {
+  1440→        if (prev.some((m) => m.id === msg.id)) return prev
+  1441→        return [...prev, msg]
+  1442→      })
+  1443→      // mark realtime incoming 1:1 messages as seen
+  1444→      if (mode === 'direct' && msg.senderId === peerId && msg.receiverId === meId) {
+  1445→        socket.emit(RT.MESSAGE_SEEN, { messageId: msg.id })
+  1446→      }
+  1447→    }
+  1448→
+  1449→    const onStatus = ({ id, status }: { id: string; status: string }) => {
+  1450→      setMessages((prev) =>
+  1451→        prev.map((m) => (m.id === id ? { ...m, status: status as MessageStatus } : m))
+  1452→      )
+  1453→    }
+  1454→
+  1455→    const onTyping = ({ userId, isTyping }: { userId: string; isTyping: boolean }) => {
+  1456→      if (mode === 'direct' && userId === peerId) setPeerTyping(isTyping)
+  1457→    }
+  1458→
+  1459→    const onReaction = ({ messageId, userId, emoji, action }: { messageId: string; userId: string; emoji: string; action: 'add' | 'remove' }) => {
+  1460→      setMessages((prev) =>
+  1461→        prev.map((m) => {
+  1462→          if (m.id !== messageId) return m
+  1463→          const reactions = m.reactions ? [...m.reactions] : []
+  1464→          if (action === 'add') {
+  1465→            if (!reactions.some((r) => r.userId === userId && r.emoji === emoji)) {
+  1466→              reactions.push({ emoji, userId, userName: '' })
+  1467→            }
+  1468→          } else {
+  1469→            const idx = reactions.findIndex((r) => r.userId === userId && r.emoji === emoji)
+  1470→            if (idx >= 0) reactions.splice(idx, 1)
+  1471→          }
+  1472→          return { ...m, reactions }
+  1473→        })
+  1474→      )
+  1475→    }
+  1476→
+  1477→    // Realtime message delete: when another participant deletes a message for
+  1478→    // everyone, the server emits message:deleted { messageId, scope:'everyone' }.
+  1479→    // We swap the local message for the "🚫 This message was deleted" placeholder.
+  1480→    const onDeleted = ({ messageId, scope }: { messageId: string; scope: string }) => {
+  1481→      if (scope !== 'everyone') return
+  1482→      setMessages((prev) =>
+  1483→        prev.map((m) =>
+  1484→          m.id === messageId
+  1485→            ? {
+  1486→                ...m,
+  1487→                deletedFor: 'everyone',
+  1488→                content: '',
+  1489→                fileUrl: null,
+  1490→                fileName: null,
+  1491→                fileSize: null,
+  1492→                mimeType: null,
+  1493→                type: 'text',
+  1494→                reactions: [],
+  1495→              }
+  1496→            : m
+  1497→        )
+  1498→      )
+  1499→    }
+  1500→
+  1501→    // Realtime message edit: server emits message:edited { messageId, content,
+  1502→    // editedAt } to sender + receiver + group members. We update the matching
+  1503→    // local message in place. Safe to receive for a message we just edited
+  1504→    // (idempotent — same content + editedAt we set optimistically).
+  1505→    const onEdited = ({
+  1506→      messageId,
+  1507→      content,
+  1508→      editedAt,
+  1509→    }: {
+  1510→      messageId: string
+  1511→      content: string
+  1512→      editedAt?: string
+  1513→    }) => {
+  1514→      setMessages((prev) =>
+  1515→        prev.map((m) =>
+  1516→          m.id === messageId
+  1517→            ? {
+  1518→                ...m,
+  1519→                content,
+  1520→                edited: true,
+  1521→                editedAt: editedAt || m.editedAt || new Date().toISOString(),
+  1522→              }
+  1523→            : m
+  1524→        )
+  1525→      )
+  1526→    }
+  1527→
+  1528→    // Group typing (sender-aware): server emits group:typing:indicator
+  1529→    // { groupId, userId, isTyping } to all other group members (excludes the
+  1530→    // typer). We filter by groupId + ignore our own id (defensive) and track
+  1531→    // the set of userIds currently typing so the indicator can show "Aria is
+  1532→    // typing…" or "3 people are typing…".
+  1533→    const onGroupTyping = ({
+  1534→      groupId,
+  1535→      userId,
+  1536→      isTyping,
+  1537→    }: {
+  1538→      groupId: string
+  1539→      userId: string
+  1540→      isTyping: boolean
+  1541→    }) => {
+  1542→      if (mode !== 'group' || groupId !== peerId) return
+  1543→      if (userId === meId) return
+  1544→      setGroupTypingUsers((prev) => {
+  1545→        const next = new Set(prev)
+  1546→        if (isTyping) next.add(userId)
+  1547→        else next.delete(userId)
+  1548→        return next
+  1549→      })
+  1550→    }
+  1551→
+  1552→    socket.on(RT.MESSAGE_NEW, onNew)
+  1553→    socket.on(RT.GROUP_MESSAGE_NEW, onNew)
+  1554→    socket.on(RT.MESSAGE_STATUS, onStatus)
+  1555→    socket.on(RT.TYPING_INDICATOR, onTyping)
+  1556→    socket.on(RT.REACTION_UPDATE, onReaction)
+  1557→    socket.on(RT.MESSAGE_DELETED, onDeleted)
+  1558→    socket.on(RT.MESSAGE_EDITED, onEdited)
+  1559→    socket.on(RT.GROUP_TYPING_INDICATOR, onGroupTyping)
+  1560→
+  1561→    return () => {
+  1562→      socket.off(RT.MESSAGE_NEW, onNew)
+  1563→      socket.off(RT.GROUP_MESSAGE_NEW, onNew)
+  1564→      socket.off(RT.MESSAGE_STATUS, onStatus)
+  1565→      socket.off(RT.TYPING_INDICATOR, onTyping)
+  1566→      socket.off(RT.REACTION_UPDATE, onReaction)
+  1567→      socket.off(RT.MESSAGE_DELETED, onDeleted)
+  1568→      socket.off(RT.MESSAGE_EDITED, onEdited)
+  1569→      socket.off(RT.GROUP_TYPING_INDICATOR, onGroupTyping)
+  1570→      if (mode === 'direct') {
+  1571→        socket.emit(RT.TYPING, { receiverId: peerId, isTyping: false })
+  1572→      }
+  1573→      if (mode === 'group') {
+  1574→        socket.emit(RT.GROUP_TYPING, { groupId: peerId, isTyping: false })
+  1575→      }
+  1576→      if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
+  1577→    }
+  1578→  }, [socket, meId, peerId, mode])
+  1579→
+  1580→  // ---- toggle reaction on a message ----
+  1581→  const toggleReaction = useCallback(
+  1582→    (messageId: string, emoji: string) => {
+  1583→      if (!socket) return
+  1584→      setMessages((prev) =>
+  1585→        prev.map((m) => {
+  1586→          if (m.id !== messageId) return m
+  1587→          const reactions = m.reactions ? [...m.reactions] : []
+  1588→          const existing = reactions.find((r) => r.userId === meId && r.emoji === emoji)
+  1589→          if (existing) {
+  1590→            const idx = reactions.indexOf(existing)
+  1591→            reactions.splice(idx, 1)
+  1592→            socket.emit(RT.REACTION_REMOVE, { messageId, emoji })
+  1593→          } else {
+  1594→            reactions.push({ emoji, userId: meId, userName: me?.name || '' })
+  1595→            socket.emit(RT.REACTION_ADD, { messageId, emoji })
+  1596→          }
+  1597→          return { ...m, reactions }
+  1598→        })
+  1599→      )
+  1600→    },
+  1601→    [socket, meId, me]
+  1602→  )
+  1603→
+  1604→  // ---- reply (set the message being replied to — shows a preview bar above
+  1605→  // the input + the next send includes replyToId in the socket payload) ----
+  1606→  const handleReply = useCallback((msg: Message) => {
+  1607→    setReplyTo(msg)
+  1608→  }, [])
+  1609→
+  1610→  // ---- delete message (for me / for everyone) ----
+  1611→  const confirmDelete = useCallback(
+  1612→    async (msg: Message, scope: 'me' | 'everyone') => {
+  1613→      setDeleteTarget(null)
+  1614→      try {
+  1615→        await api(`/api/messages/${msg.id}/delete`, {
+  1616→          method: 'POST',
+  1617→          body: JSON.stringify({ scope }),
+  1618→        })
+  1619→        if (scope === 'me') {
+  1620→          // optimistic: remove from local view immediately
+  1621→          setMessages((prev) => prev.filter((m) => m.id !== msg.id))
+  1622→          toast.success('Message deleted for you')
+  1623→        } else {
+  1624→          // tell other participants via realtime + swap local for placeholder
+  1625→          if (socket) {
+  1626→            socket.emit(RT.MESSAGE_DELETE, { messageId: msg.id, scope: 'everyone' })
+  1627→          }
+  1628→          setMessages((prev) =>
+  1629→            prev.map((m) =>
+  1630→              m.id === msg.id
+  1631→                ? {
+  1632→                    ...m,
+  1633→                    deletedFor: 'everyone',
+  1634→                    content: '',
+  1635→                    fileUrl: null,
+  1636→                    fileName: null,
+  1637→                    fileSize: null,
+  1638→                    mimeType: null,
+  1639→                    type: 'text',
+  1640→                    reactions: [],
+  1641→                  }
+  1642→                : m
+  1643→            )
+  1644→          )
+  1645→          toast.success('Message deleted for everyone')
+  1646→        }
+  1647→      } catch (e: any) {
+  1648→        toast.error(e?.message || 'Failed to delete message')
+  1649→      }
+  1650→    },
+  1651→    [socket]
+  1652→  )
+  1653→
+  1654→  // ---- toggle star on a message (optimistic + API) ----
+  1655→  const toggleStar = useCallback(async (msg: Message) => {
+  1656→    const next = !msg.starred
+  1657→    setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, starred: next } : m)))
+  1658→    try {
+  1659→      if (next) {
+  1660→        await api(`/api/messages/${msg.id}/star`, { method: 'POST' })
+  1661→        toast.success('Starred')
+  1662→      } else {
+  1663→        await api(`/api/messages/${msg.id}/star`, { method: 'DELETE' })
+  1664→        toast.success('Unstarred')
+  1665→      }
+  1666→    } catch (e: any) {
+  1667→      // revert on failure
+  1668→      setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, starred: !next } : m)))
+  1669→      toast.error(e?.message || 'Failed to update star')
+  1670→    }
+  1671→  }, [])
+  1672→
+  1673→  // ---- toggle pin on a message (1:1 only, per-user) ----
+  1674→  // Round 6: the backend enforces "only one pinned message per 1:1 conversation
+  1675→  // per user". On pin: server unpins any previously pinned message by me in
+  1676→  // the same conversation, then sets pinnedBy=me.id on the new one. We mirror
+  1677→  // that optimistically on the client: clear pinnedBy on any message I had
+  1678→  // pinned in this conversation, then set/clear pinnedBy on the target. On
+  1679→  // error we revert the target's pinnedBy only (the previous-pin clear is
+  1680→  // idempotent + the server is the source of truth on next reload).
+  1681→  const togglePin = useCallback(
+  1682→    async (msg: Message) => {
+  1683→      if (!meId || mode !== 'direct') return
+  1684→      const isCurrentlyPinned = msg.pinnedBy === meId
+  1685→      const nextPinned = !isCurrentlyPinned
+  1686→      setMessages((prev) =>
+  1687→        prev
+  1688→          .map((m) => (m.pinnedBy === meId ? { ...m, pinnedBy: null } : m))
+  1689→          .map((m) => (m.id === msg.id ? { ...m, pinnedBy: nextPinned ? meId : null } : m))
+  1690→      )
+  1691→      try {
+  1692→        await api(`/api/messages/${msg.id}/pin`, {
+  1693→          method: 'POST',
+  1694→          body: JSON.stringify({ pinned: nextPinned }),
+  1695→        })
+  1696→        toast.success(nextPinned ? 'Message pinned' : 'Message unpinned')
+  1697→      } catch (e: any) {
+  1698→        // Revert the target's pinnedBy to its prior state. The previous-pin
+  1699→        // clear is left as-is (a subsequent reload will reconcile).
+  1700→        setMessages((prev) =>
+  1701→          prev.map((m) =>
+  1702→            m.id === msg.id ? { ...m, pinnedBy: isCurrentlyPinned ? meId : null } : m
+  1703→          )
+  1704→        )
+  1705→        toast.error(e?.message || 'Failed to update pin')
+  1706→      }
+  1707→    },
+  1708→    [meId, mode]
+  1709→  )
+  1710→
+  1711→  // ---- scroll to a specific message in the messages list (used by the
+  1712→  // pinned-message bar so the user can jump back to the pinned bubble) ----
+  1713→  // Looks up the message element via its `data-msg-id` attribute and uses
+  1714→  // scrollIntoView({ block: 'center' }) so the browser handles the nearest
+  1715→  // scroll container (the messages scroll area). No-op if the element isn't
+  1716→  // mounted (e.g. the pinned message is older than the loaded page).
+  1717→  const scrollToMessage = useCallback((msgId: string) => {
+  1718→    const el = scrollRef.current?.querySelector(`[data-msg-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
+  1719→    if (el) {
+  1720→      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  1721→    }
+  1722→  }, [])
+  1723→
+  1724→  // ---- edit a message (sender only, within 15-min window) ----
+  1725→  // Tries realtime first (socket.emit with ack) for instant propagation to
+  1726→  // other participants; falls back to POST /api/messages/[id]/edit if the
+  1727→  // socket is unavailable or didn't ack. On success, updates the local
+  1728→  // message in place (content + edited=true + editedAt) and toasts. Throws
+  1729→  // on error so the dialog can keep open + show the error toast.
+  1730→  const handleEditSave = useCallback(
+  1731→    async (msg: Message, content: string): Promise<void> => {
+  1732→      if (!meId) throw new Error('Not authenticated')
+  1733→
+  1734→      let realtimeOk = false
+  1735→      if (socket) {
+  1736→        const ack = await new Promise<any>((resolve) => {
+  1737→          // Socket.io v4+ ack: third arg is the callback. We wrap it in a
+  1738→          // promise for cleaner async flow + a 10s timeout guard so a
+  1739→          // missing ack doesn't hang the dialog forever.
+  1740→          const timer = setTimeout(() => resolve({ ok: false, error: 'timeout' }), 10000)
+  1741→          socket.emit(
+  1742→            RT.MESSAGE_EDIT,
+  1743→            { messageId: msg.id, content },
+  1744→            (ack: any) => {
+  1745→              clearTimeout(timer)
+  1746→              resolve(ack)
+  1747→            }
+  1748→          )
+  1749→        })
+  1750→        if (ack?.ok) {
+  1751→          realtimeOk = true
+  1752→        } else if (ack?.error) {
+  1753→          // Surface server-side errors (e.g. "edit window expired",
+  1754→          // "forbidden", "empty") to the user.
+  1755→          throw new Error(String(ack.error))
+  1756→        }
+  1757→      }
+  1758→
+  1759→      let editedAt: string | null = null
+  1760→      if (!realtimeOk) {
+  1761→        // REST fallback — uses the authoritative editedAt from the server.
+  1762→        const res = await api<{
+  1763→          message: { id: string; content: string; edited: boolean; editedAt: string | null }
+  1764→        }>(`/api/messages/${msg.id}/edit`, {
+  1765→          method: 'POST',
+  1766→          body: JSON.stringify({ content }),
+  1767→        })
+  1768→        editedAt = res.message?.editedAt ?? null
+  1769→      } else {
+  1770→        editedAt = new Date().toISOString()
+  1771→      }
+  1772→
+  1773→      setMessages((prev) =>
+  1774→        prev.map((m) =>
+  1775→          m.id === msg.id
+  1776→            ? { ...m, content, edited: true, editedAt: editedAt || new Date().toISOString() }
+  1777→            : m
+  1778→        )
+  1779→      )
+  1780→      toast.success('Message edited')
+  1781→    },
+  1782→    [socket, meId]
+  1783→  )
+  1784→
+  1785→  // ---- update disappearing messages preference ----
+  1786→  const handleDisappearingChange = useCallback(
+  1787→    async (value: 'OFF' | '24H' | '7D') => {
+  1788→      const prev = disappearing
+  1789→      setDisappearing(value)
+  1790→      try {
+  1791→        await api('/api/messages/preferences', {
+  1792→          method: 'POST',
+  1793→          body: JSON.stringify({ peerId, disappearing: value }),
+  1794→        })
+  1795→        toast.success(
+  1796→          value === 'OFF'
+  1797→            ? 'Disappearing messages off'
+  1798→            : `Messages disappear after ${value === '24H' ? '24 hours' : '7 days'}`
+  1799→        )
+  1800→      } catch (e: any) {
+  1801→        setDisappearing(prev)
+  1802→        toast.error(e?.message || 'Failed to update')
+  1803→      }
+  1804→    },
+  1805→    [peerId, disappearing]
+  1806→  )
+  1807→
+  1808→  // ---- update wallpaper preference ----
+  1809→  const handleWallpaperChange = useCallback(
+  1810→    async (value: string) => {
+  1811→      const prev = wallpaper
+  1812→      setWallpaper(value || null)
+  1813→      try {
+  1814→        await api('/api/messages/preferences', {
+  1815→          method: 'POST',
+  1816→          body: JSON.stringify({ peerId, wallpaper: value || null }),
+  1817→        })
+  1818→        toast.success(value ? 'Wallpaper updated' : 'Wallpaper cleared')
+  1819→      } catch (e: any) {
+  1820→        setWallpaper(prev)
+  1821→        toast.error(e?.message || 'Failed to update wallpaper')
+  1822→      }
+  1823→    },
+  1824→    [peerId, wallpaper]
+  1825→  )
+  1826→
+  1827→  // ---- upload a custom wallpaper image and apply it ----
+  1828→  const handleCustomWallpaperUpload = useCallback(
+  1829→    async (file: File) => {
+  1830→      if (!file.type.startsWith('image/')) {
+  1831→        toast.error('Please choose an image file')
+  1832→        return
+  1833→      }
+  1834→      // Optimistic: leave current wallpaper untouched until upload + POST succeed.
+  1835→      const prev = wallpaper
+  1836→      try {
+  1837→        const { file: uploaded } = await uploadFile(file)
+  1838→        // Single-quote the url so special chars in the URL don't break the CSS value.
+  1839→        const value = `url('${uploaded.url}')`
+  1840→        setWallpaper(value)
+  1841→        await api('/api/messages/preferences', {
+  1842→          method: 'POST',
+  1843→          body: JSON.stringify({ peerId, wallpaper: value }),
+  1844→        })
+  1845→        toast.success('Custom wallpaper set')
+  1846→      } catch (e: any) {
+  1847→        setWallpaper(prev)
+  1848→        toast.error(e?.message || 'Failed to upload wallpaper')
+  1849→        throw e
+  1850→      }
+  1851→    },
+  1852→    [peerId, wallpaper]
+  1853→  )
+  1854→
+  1855→  // ---- scroll handling + infinite scroll up ----
+  1856→  const loadOlder = useCallback(async () => {
+  1857→    if (!oldestTsRef.current) return
+  1858→    setLoadingOlder(true)
+  1859→    const el = scrollRef.current
+  1860→    prevHeightRef.current = el?.scrollHeight || 0
+  1861→    try {
+  1862→      const endpoint = `/api/messages?${mode === 'direct' ? 'userId' : 'groupId'}=${encodeURIComponent(peerId)}&before=${encodeURIComponent(oldestTsRef.current)}`
+  1863→      const data = await api<{ messages: Message[] }>(endpoint)
+  1864→      if (data.messages.length === 0) {
+  1865→        setHasMore(false)
+  1866→      } else {
+  1867→        const normalized = data.messages.map(normalizeMessage)
+  1868→        skipAutoScrollRef.current = true
+  1869→        setMessages((prev) => [...normalized, ...prev])
+  1870→        oldestTsRef.current = normalized[0]?.createdAt || oldestTsRef.current
+  1871→        if (normalized.length < 50) setHasMore(false)
+  1872→        // restore scroll position after DOM update
+  1873→        requestAnimationFrame(() => {
+  1874→          if (el) {
+  1875→            const newHeight = el.scrollHeight
+  1876→            el.scrollTop = newHeight - prevHeightRef.current
+  1877→          }
+  1878→        })
+  1879→      }
+  1880→    } catch (e: any) {
+  1881→      toast.error(e?.message || 'Failed to load older messages')
+  1882→    } finally {
+  1883→      setLoadingOlder(false)
+  1884→    }
+  1885→  }, [mode, peerId])
+  1886→
+  1887→  const handleScroll = useCallback(() => {
+  1888→    const el = scrollRef.current
+  1889→    if (!el) return
+  1890→    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+  1891→    atBottomRef.current = distFromBottom < 80
+  1892→    if (el.scrollTop < 60 && hasMore && !loadingOlder && !loading && oldestTsRef.current) {
+  1893→      loadOlder()
+  1894→    }
+  1895→  }, [hasMore, loadingOlder, loading, loadOlder])
+  1896→
+  1897→  // ---- send text ----
+  1898→  const sendMessage = useCallback(
+  1899→    (partial: Pick<Message, 'content' | 'type' | 'fileUrl' | 'fileName' | 'fileSize' | 'mimeType'>) => {
+  1900→      if (!socket || !meId) return
+  1901→      const tempId = newTempId()
+  1902→      const optimistic: Message = {
+  1903→        id: tempId,
+  1904→        tempId,
+  1905→        senderId: meId,
+  1906→        senderName: me?.name || null,
+  1907→        senderPhoto: me?.profile?.photoUrl ?? null,
+  1908→        receiverId: mode === 'direct' ? peerId : null,
+  1909→        groupId: mode === 'group' ? peerId : null,
+  1910→        content: partial.content,
+  1911→        type: partial.type,
+  1912→        fileUrl: partial.fileUrl ?? null,
+  1913→        fileName: partial.fileName ?? null,
+  1914→        fileSize: partial.fileSize ?? null,
+  1915→        mimeType: partial.mimeType ?? null,
+  1916→        status: 'SENDING',
+  1917→        createdAt: new Date().toISOString(),
+  1918→        // Round 7: mirror the reply target on the optimistic bubble so the
+  1919→        // reply quote card renders immediately (before the server ack).
+  1920→        replyToId: replyTo?.id ?? null,
+  1921→      }
+  1922→      setMessages((prev) => [...prev, optimistic])
+  1923→      atBottomRef.current = true
+  1924→
+  1925→      const payload: any = {
+  1926→        tempId,
+  1927→        content: partial.content,
+  1928→        type: partial.type,
+  1929→        fileUrl: partial.fileUrl ?? undefined,
+  1930→        fileName: partial.fileName ?? undefined,
+  1931→        fileSize: partial.fileSize ?? undefined,
+  1932→        mimeType: partial.mimeType ?? undefined,
+  1933→        ...(mode === 'direct' ? { receiverId: peerId } : { groupId: peerId }),
+  1934→      }
+  1935→      // Round 7: include replyToId when the user is replying to a message.
+  1936→      if (replyTo) payload.replyToId = replyTo.id
+  1937→      const event = mode === 'direct' ? RT.MESSAGE_SEND : RT.GROUP_MESSAGE_SEND
+  1938→      socket.emit(event, payload, (ack: any) => {
+  1939→        if (ack?.ok && ack.message) {
+  1940→          const realMsg: Message = {
+  1941→            ...normalizeMessage(ack.message),
+  1942→            tempId,
+  1943→            senderName: ack.message.senderName ?? ack.message.sender?.name ?? me?.name ?? null,
+  1944→            senderPhoto: ack.message.senderPhoto ?? ack.message.sender?.profile?.photoUrl ?? me?.profile?.photoUrl ?? null,
+  1945→          }
+  1946→          setMessages((prev) => prev.map((m) => (m.tempId === tempId ? realMsg : m)))
+  1947→        } else {
+  1948→          // leave optimistic in place with SENT fallback so user can retry
+  1949→          setMessages((prev) =>
+  1950→            prev.map((m) => (m.tempId === tempId ? { ...m, status: 'SENT' } : m))
+  1951→          )
+  1952→          toast.error(ack?.error || 'Failed to send message')
+  1953→        }
+  1954→      })
+  1955→      // Round 7: clear the reply target after the send has been initiated
+  1956→      // (the optimistic bubble already carries replyToId so the quote card
+  1957→      // stays visible; we don't need to wait for the server ack).
+  1958→      setReplyTo(null)
+  1959→    },
+  1960→    [socket, meId, me, mode, peerId, replyTo]
+  1961→  )
+  1962→
+  1963→  const sendText = useCallback(() => {
+  1964→    const content = text.trim()
+  1965→    if (!content) return
+  1966→    sendMessage({ content, type: 'text', fileUrl: null, fileName: null, fileSize: null, mimeType: null })
+  1967→    setText('')
+  1968→    // Clear the draft now that the message has been sent (don't leave a
+  1969→    // lingering draft behind). Cancel any pending debounce-save first.
+  1970→    if (draftSaveTimerRef.current) {
+  1971→      clearTimeout(draftSaveTimerRef.current)
+  1972→      draftSaveTimerRef.current = null
+  1973→    }
+  1974→    const isGroup = mode === 'group'
+  1975→    api(`/api/messages/drafts?peerId=${encodeURIComponent(peerId)}&isGroup=${isGroup}`, {
+  1976→      method: 'DELETE',
+  1977→    }).catch(() => {})
+  1978→    if (socket && mode === 'direct') {
+  1979→      socket.emit(RT.TYPING, { receiverId: peerId, isTyping: false })
+  1980→      if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
+  1981→    }
+  1982→    if (socket && mode === 'group') {
+  1983→      // Stop the typing indicator on send so other group members see the
+  1984→      // message arrive instead of a lingering "X is typing…" bubble.
+  1985→      socket.emit(RT.GROUP_TYPING, { groupId: peerId, isTyping: false })
+  1986→      if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
+  1987→    }
+  1988→  }, [text, sendMessage, socket, mode, peerId])
+  1989→
+  1990→  // ---- send file ----
+  1991→  const sendFile = useCallback(
+  1992→    async (file: File) => {
+  1993→      setUploading(true)
+  1994→      try {
+  1995→        const { file: uploaded } = await uploadFile(file)
+  1996→        const type = fileTypeFromMime(uploaded.mimeType)
+  1997→        sendMessage({
+  1998→          content: '',
+  1999→          type,
+  2000→          fileUrl: uploaded.url,
+
+[showing lines 1-2000 of 4087; use offset=2001 with limit to continue reading]

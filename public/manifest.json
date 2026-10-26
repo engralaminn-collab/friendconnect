@@ -1,0 +1,37 @@
+{
+  "name": "FriendConnect — Reconnect with old friends",
+  "short_name": "FriendConnect",
+  "description": "Private social platform to find and reconnect with old friends. Chat, call, and share — privately.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F8FAFC",
+  "theme_color": "#F97316",
+  "categories": ["social", "communication"],
+  "icons": [
+    {
+      "src": "/friendconnect-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/friendconnect-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Chats",
+      "url": "/?view=chat",
+      "icons": [{ "src": "/friendconnect-logo.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Calls",
+      "url": "/?view=calls",
+      "icons": [{ "src": "/friendconnect-logo.png", "sizes": "96x96" }]
+    }
+  ]
+}

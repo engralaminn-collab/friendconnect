@@ -1,0 +1,429 @@
+// FriendConnect - Private Social Platform schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  username     String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  // Additive (round 11): enterprise auth
+  emailVerified     Boolean  @default(false)
+  twoFactorSecret   String?
+  twoFactorEnabled  Boolean  @default(false)
+  twoFactorBackup   String?  // comma-sep backup codes (hashed)
+  role              String   @default("user") // user | admin
+  fileQuotaBytes    Int      @default(104857600) // 100MB default quota
+  fileUsedBytes     Int      @default(0)
+
+  profile       Profile?
+  sessions      Session[]
+  sentRequests  Friendship[] @relation("FriendshipRequester")
+  recvRequests  Friendship[] @relation("FriendshipReceiver")
+  sentMessages  Message[]     @relation("MessageSender")
+  recvMessages  Message[]     @relation("MessageReceiver")
+  ownedGroups   Group[]       @relation("GroupOwner")
+  memberships   GroupMember[]
+  callsInitiated Call[]      @relation("CallCaller")
+  callsReceived   Call[]      @relation("CallReceiver")
+  notifications Notification[]
+  files         File[]
+  otpCode       String?
+  otpExpiry     DateTime?
+  reactions     MessageReaction[]
+  chatPrefs     ChatPreference[]
+  stories       Story[]
+  storyViews    StoryView[]
+  starredMessages MessageStar[]
+  storyReplies  StoryReply[]
+  drafts        MessageDraft[]
+  storyReactions StoryReaction[]
+  broadcastLists BroadcastList[]
+  // Round 9 fix: back-relation for BroadcastMember.recipient (see comment on
+  // BroadcastMember). Additive — no existing fields changed.
+  broadcastMemberships BroadcastMember[]
+  reminders      MessageReminder[]
+  auditLogs      AuditLog[]
+  pushSubscriptions PushSubscription[]
+}
+
+model Profile {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  photoUrl           String?
+  bio                String?
+  phone              String?
+  location           String?
+  birthday           String?
+  education          String?
+  work               String?
+  // privacy: PUBLIC | FRIENDS | PRIVATE
+  profileVisibility  String   @default("PUBLIC")
+  messagePermission  String   @default("FRIENDS")
+  callPermission     String   @default("FRIENDS")
+  // Additive (round 2): read-receipts toggle
+  readReceipts       Boolean  @default(true)
+  // Additive (round 6): CSS filter for profile photo (e.g. "grayscale(1)", "sepia(0.5)", "none")
+  photoFilter        String?  
+  // Additive (round 10): profile verification badge (verified | unverified | pending)
+  verified           String   @default("unverified")
+  lastSeen           DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  // Additive (round 11): device management
+  userAgent   String?  // browser/device User-Agent string
+  deviceName  String?  // parsed friendly name (e.g. "Chrome on macOS")
+  ipAddress   String?  // last known IP
+  lastActiveAt DateTime @default(now())
+}
+
+model Friendship {
+  id          String   @id @default(cuid())
+  requesterId String
+  receiverId  String
+  status      String   @default("PENDING") // PENDING | ACCEPTED | DECLINED | BLOCKED
+  blockerId   String?
+  // Additive (round 8): close friends — marks this friendship as a "close friend"
+  isCloseFriend Boolean @default(false)
+  // Additive (round 8): mute their stories
+  storiesMuted Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requester User @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  receiver User @relation("FriendshipReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, receiverId])
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String?
+  groupId    String?
+  content    String
+  type       String   @default("text") // text | image | video | audio | document
+  fileUrl    String?
+  fileName   String?
+  fileSize   Int?
+  mimeType   String?
+  status     String   @default("SENT") // SENDING | SENT | DELIVERED | SEEN
+  createdAt  DateTime @default(now())
+  seenAt     DateTime?
+  // Additive (round 2): soft-delete. "me" = deleted for sender only;
+  // "everyone" = deleted for all participants (content cleared).
+  deletedFor String   @default("")
+  forwardedFrom String? // userId of original sender if forwarded
+  // Additive (round 3): disappearing messages — when set, message auto-deletes after expiresAt
+  expiresAt DateTime?
+  // Additive (round 5): message edit tracking
+  editedAt  DateTime?
+  edited    Boolean  @default(false)
+  // Additive (round 6): pin message within a 1:1 chat (per-user, stores userId who pinned)
+  pinnedBy  String?  
+  // Additive (round 7): reply-to (quote) — stores the id of the message being replied to
+  replyToId String?
+  // Additive (round 8): scheduled messages — when set, message is delivered at this future time
+  scheduledFor DateTime?
+
+  sender   User   @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User?  @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  group    Group? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  reactions MessageReaction[]
+  starredBy MessageStar[]
+  reminders MessageReminder[]
+}
+
+model Group {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  photoUrl    String?
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner     User         @relation("GroupOwner", fields: [createdBy], references: [id], onDelete: Cascade)
+  members   GroupMember[]
+  messages  Message[]
+}
+
+model GroupMember {
+  id        String   @id @default(cuid())
+  groupId   String
+  userId    String
+  role      String   @default("MEMBER") // OWNER | ADMIN | MEMBER
+  joinedAt  DateTime @default(now())
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+}
+
+model Call {
+  id         String    @id @default(cuid())
+  callerId   String
+  receiverId String?
+  groupId    String?
+  type       String    @default("audio") // audio | video
+  status     String    @default("ringing") // ringing | connected | ended | missed | declined | busy | failed | cancelled | timeout
+  startedAt  DateTime  @default(now())
+  endedAt    DateTime?
+  duration   Int?
+  // Additive (round 13): call tracking for diagnostics + history
+  answeredAt DateTime?
+  failureReason String?  // e.g. "ice_failed", "timeout", "rejected"
+  connectionType String? // "p2p" | "turn" | "stun" (best-guess from ICE candidate stats)
+
+  caller   User   @relation("CallCaller", fields: [callerId], references: [id], onDelete: Cascade)
+  receiver User?  @relation("CallReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([callerId])
+  @@index([receiverId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // friend_request | message | call | group | system
+  title     String
+  body      String
+  data      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model File {
+  id        String   @id @default(cuid())
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name      String
+  mimeType  String
+  size      Int
+  url       String
+  createdAt DateTime @default(now())
+}
+
+// ---- Additive: message reactions ----
+model MessageReaction {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+}
+
+// ---- Additive: per-user chat preferences (pin / mute) ----
+model ChatPreference {
+  id        String   @id @default(cuid())
+  userId    String
+  peerId    String   // the other participant's userId (1:1 chats)
+  pinned    Boolean  @default(false)
+  muted     Boolean  @default(false)
+  // Additive (round 3): disappearing messages timer. OFF | 24H | 7D
+  disappearing String @default("OFF")
+  // Additive (round 3): chat wallpaper (CSS background value or preset id)
+  wallpaper String?
+  // Additive (round 4): chat archive
+  archived  Boolean  @default(false)
+  // Additive (round 10): chat folder name (null = no folder; e.g. "Work", "Family")
+  folder    String?
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, peerId])
+}
+
+// ---- Additive (round 2): stories / status updates ----
+model Story {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   @default("text") // text | image
+  content   String   // text content or image url
+  bg        String?  // background color/gradient for text stories
+  createdAt DateTime @default(now())
+  expiresAt DateTime // 24h after createdAt
+  // Additive (round 7): highlight — saved story that doesn't expire
+  isHighlight Boolean @default(false)
+
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  views  StoryView[]
+  replies StoryReply[]
+  reactions StoryReaction[]
+
+  @@index([userId])
+}
+
+model StoryView {
+  id        String   @id @default(cuid())
+  storyId   String
+  userId    String
+  viewedAt  DateTime @default(now())
+
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, userId])
+}
+
+// ---- Additive (round 3): starred / favorited messages ----
+model MessageStar {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+}
+
+// ---- Additive (round 4): story replies ----
+model StoryReply {
+  id        String   @id @default(cuid())
+  storyId   String
+  userId    String  // replier
+  content   String  // text reply
+  createdAt DateTime @default(now())
+
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([storyId])
+}
+
+// ---- Additive (round 4): message drafts (auto-saved per conversation) ----
+model MessageDraft {
+  id        String   @id @default(cuid())
+  userId    String  // owner of the draft
+  peerId    String  // conversation peer (user id or group id)
+  isGroup   Boolean @default(false)
+  content   String
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, peerId, isGroup])
+}
+
+// ---- Additive (round 8): story reactions ----
+model StoryReaction {
+  id        String   @id @default(cuid())
+  storyId   String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, userId])
+}
+
+// ---- Additive (round 9): broadcast lists (send one message to many 1:1 chats) ----
+model BroadcastList {
+  id        String   @id @default(cuid())
+  ownerId   String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner   User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  members BroadcastMember[]
+
+  @@index([ownerId])
+}
+
+model BroadcastMember {
+  id            String   @id @default(cuid())
+  broadcastId   String
+  recipientId   String   // the friend's userId to receive the broadcast
+  createdAt     DateTime @default(now())
+
+  broadcast BroadcastList @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  // Round 9 fix: the GET /api/broadcasts route does
+  // `include: { members: { include: { recipient: ... } } }` to populate each
+  // member's name + username. The relation was missing from the original
+  // round-9 schema (backend route returned 500). Adding it is purely additive
+  // (no existing fields or constraints changed).
+  recipient User @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@unique([broadcastId, recipientId])
+}
+
+// ---- Additive (round 10): message reminders ----
+model MessageReminder {
+  id          String   @id @default(cuid())
+  userId      String  // who set the reminder
+  messageId   String  // the message to be reminded of
+  remindAt    DateTime // when to notify
+  createdAt   DateTime @default(now())
+  notified    Boolean  @default(false)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([userId, notified])
+}
+
+// ---- Additive (round 11): audit log (enterprise security) ----
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?  // actor (null for system)
+  action    String   // e.g. "login", "logout", "2fa_enable", "admin_user_view"
+  resource  String?  // e.g. "user:abc123", "message:def456"
+  ip        String?
+  userAgent String?
+  meta      String?  // JSON string of extra context
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ---- Additive (round 15): Web Push subscriptions ----
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

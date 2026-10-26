@@ -1,0 +1,66 @@
+# FriendConnect — Production Caddyfile
+# Deploy to: /etc/caddy/Caddyfile
+# Caddy auto-provisions HTTPS via Let's Encrypt.
+#
+# Configure via environment variables or replace placeholders:
+#   {$APP_DOMAIN:friendconnect.example.com} — your domain
+#   Realtime runs on :3003 (Socket.IO with path /)
+#
+# Socket.IO connections go through the gateway via /?XTransformPort=3003
+# (handled by the @realtime matcher below).
+
+{$APP_DOMAIN:friendconnect.example.com} {
+        # Security headers
+        header {
+                Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+                X-Content-Type-Options "nosniff"
+                X-Frame-Options "DENY"
+                Referrer-Policy "strict-origin-when-cross-origin"
+                Permissions-Policy "camera=(self), microphone=(self), geolocation=()"
+                Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self' wss: https:; font-src 'self' data:; object-src 'none'; frame-ancestors 'none'"
+                -Server
+        }
+
+        # Compression
+        encode gzip zstd
+
+        # Upload size limit (50MB max file upload)
+        request_body {
+                max_size 50MB
+        }
+
+        # Timeouts
+        timeouts {
+                read 60s
+                write 60s
+                header 10s
+        }
+
+        # WebSocket support for realtime service (Socket.IO on :3003)
+        # Socket.IO uses polling upgrade at /?XTransformPort=3003 then upgrades to ws
+        @realtime query XTransformPort=3003
+        handle @realtime {
+                reverse_proxy localhost:3003 {
+                        header_up Host {host}
+                        header_up X-Forwarded-For {remote_host}
+                        header_up X-Forwarded-Proto {scheme}
+                        header_up X-Real-IP {remote_host}
+                }
+        }
+
+        # Health/metrics endpoints (no auth)
+        @api_health path /api/health /api/metrics /api/webrtc/health
+        handle @api_health {
+                reverse_proxy localhost:3000
+        }
+
+        # Main app (Next.js on :3000)
+        handle {
+                reverse_proxy localhost:3000 {
+                        header_up Host {host}
+                        header_up X-Forwarded-For {remote_host}
+                        header_up X-Forwarded-Proto {scheme}
+                        header_up X-Real-IP {remote_host}
+                }
+        }
+}

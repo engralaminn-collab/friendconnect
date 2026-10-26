@@ -1,0 +1,303 @@
+   800→Agent: orchestrator (Z.ai Code) — scheduled 15-min review (round 5, frontend + integration)
+   801→Task: Wire round 5 features frontend (message edit, group typing, call stats, file previews) + integration QA + bug fix.
+   802→
+   803→Work Log:
+   804→- Dispatched 2 parallel subagents:
+   805→  - Task 15-chat-edit-typing: edited ChatView.tsx surgically. Message edit: `edited`+`editedAt` in Message interface + normalizeMessage; Edit option in long-press action menu (sender only, text-only, within 15-min window); EditMessageDialog (Textarea + char count + Save/Cancel); realtime MESSAGE_EDIT emit + MESSAGE_EDITED subscription; "edited" label next to timestamp. Group typing: groupTypingUsers Set + groupMembers Map (fetched from GET /api/groups/:id); GROUP_TYPING emit on input with 1.5s debounce; GROUP_TYPING_INDICATOR subscription; "{name} is typing…" / "{n} people are typing…" indicator.
+   806→  - Task 15-callstats-filepreview: edited CallsView.tsx (CallStatsCard at top — 6-tile grid: Total/Connected/Missed/Duration/Audio/Video + outgoing/incoming ratio bar + avg duration; hidden when total=0; missed in destructive color) + ChatView.tsx MessageBubble (PDF inline preview via iframe with header bar + fallback; image hover expand overlay; audio gradient voice-card; video border).
+   807→- **CRITICAL BUG FOUND + FIXED during QA**: opening any chat threw "Runtime ReferenceError: Cannot access 'groupTypingCount' before initialization" (temporal dead zone). The subagent declared `const groupTypingCount = groupTypingUsers.size` at line ~1660 (near the typing-label code) but referenced it in the auto-scroll effect's dependency array at line 1010 (which runs earlier in the component body). Fixed by moving the `groupTypingCount` definition up to line 801 (right after the `groupTypingUsers` state declaration) and removing the duplicate later definition. Lint clean after fix.
+   808→- Integration QA via agent-browser (gateway 81, mobile 390x844, nextjs-portal hidden):
+   809→  - Login as aria → Calls → stats card hidden (total=0, clean empty state) ✓
+   810→  - Chats → Bilal chat → opens without error (after bug fix) ✓
+   811→  - Sent "Editable test message" → long-press → action menu shows Edit (between Reply and Forward) ✓
+   812→  - Edit → dialog with Textarea prefilled → edited to "Editable test message — EDITED ✏️" → Save → bubble shows new content + "edited" label → DB confirms edited:true + editedAt ✓
+   813→  - No errors. `bun run lint` clean (0 errors). Gateway 200. Realtime 200.
+   814→
+   815→Stage Summary:
+   816→- Round 5 complete: 4 new features (message edit, group typing sender-aware, call duration stats, file previews/PDF) all shipped + browser-verified. 1 critical bug fixed (groupTypingCount temporal-dead-zone). All additive — zero existing code/features removed.
+   817→- New files: src/app/api/messages/[id]/edit/route.ts, src/app/api/calls/stats/route.ts.
+   818→- Modified (surgical): prisma/schema.prisma (+Message.edited/editedAt), src/app/api/messages/route.ts (+edited/editedAt), mini-services/realtime/index.ts (+message:edit + group:typing handlers), src/lib/constants.ts (+4 RT events), src/components/fc/chat/ChatView.tsx (+edit UI + group typing + PDF preview + image/audio/video polish + groupTypingCount bug fix), src/components/fc/calls/CallsView.tsx (+stats card).
+   819→- Lint clean, dev 200, realtime 200, all features QA'd.
+   820→- Cumulative feature set now: auth, profiles, friends (search/request/accept/reject/remove/block/suggestions/online-widget), 1:1+group chat (realtime/typing/presence/status/file-sharing/voice-notes/emoji/reactions/delete/forward/star/disappearing/wallpaper/search/pin/mute/archive/drafts/**edit**/**group-typing**), stories (create/view/auto-advance/replies), WebRTC calls (**stats**), groups CRUD, notifications, settings (theme/notifications/privacy/read-receipts), dark mode, **file previews (PDF inline)**.
+   821→- Recommended next-phase features: group calls, message scheduling, chat export, last-seen granularity, message pin within chat, profile photo cropping/filters, story highlights, broadcast lists, message search global, chat wallpapers custom upload, typing status in conversation list.
+   822→
+   823→---
+   824→Task ID: 16-backend
+   825→Agent: orchestrator (Z.ai Code) — scheduled 15-min review (round 6, backend)
+   826→Task: Backend for round 6 features: global message search, message pin within chat, last-seen granularity, profile photo filters.
+   827→
+   828→Work Log:
+   829→- DB (additive): added `photoFilter String?` to Profile (CSS filter value like "grayscale(1)"). Added `pinnedBy String?` to Message (userId who pinned it within a 1:1 chat). Ran `bun run db:push` + `bun run db:generate` — success.
+   830→- API (new routes, no existing endpoints renamed):
+   831→  - `GET /api/messages/search?q=QUERY` — global search across all my 1:1 + group conversations. Searches message content (contains), excludes deleted-for-everyone + deleted-for-me, returns up to 50 results sorted by recency, each with conversation context (peerId/peerName for direct, groupId/groupName for group).
+   832→  - `POST /api/messages/[id]/pin` body `{ pinned: true|false }` — pin/unpin a message within a 1:1 chat (per-user). On pin: unpins any previously pinned message by me in the same conversation, then sets pinnedBy=me.id. On unpin: clears pinnedBy if I pinned it.
+   833→- API (modified, backward-compatible):
+   834→  - `GET /api/messages` (both 1:1 + group): now includes `pinnedBy` (userId or null) in each message response.
+   835→  - `GET /api/auth/me` + `PUT /api/users/me` + response: now include `photoFilter` (string or null). users/me PUT accepts `photoFilter` in the string-fields loop.
+   836→  - `GET /api/users/[id]`: now includes `photoFilter` so other users' filtered photos render correctly.
+   837→- Updated `ProfileData` type in src/hooks/use-auth.tsx to include `photoFilter: string | null`.
+   838→- Restarted realtime mini-service + Next dev server to load new Prisma client. Verified: gateway 200, realtime 200, /api/messages/search → 401 (needs auth), /api/messages/x/pin → 405 (POST only).
+   839→- `bun run lint` clean (0 errors).
+   840→- Note on last-seen granularity: the existing `lastSeen` field on Profile is already updated on socket disconnect + by the realtime service. The frontend will implement a `formatLastSeen` helper that shows "online"/"last seen just now"/"last seen 5m ago"/"last seen 2h ago"/"last seen yesterday"/"last seen Jan 5" with finer granularity than the current `timeAgo` helper. No backend change needed.
+   841→
+   842→Stage Summary:
+   843→- Backend for global search, message pin, profile photo filters is complete. Last-seen granularity is frontend-only. Frontend not yet wired.
+   844→- New files: src/app/api/messages/search/route.ts, src/app/api/messages/[id]/pin/route.ts.
+   845→- Modified: prisma/schema.prisma (+Profile.photoFilter, +Message.pinnedBy), src/app/api/messages/route.ts (+pinnedBy), src/app/api/auth/me/route.ts (+photoFilter), src/app/api/users/me/route.ts (+photoFilter accept+return), src/app/api/users/[id]/route.ts (+photoFilter), src/hooks/use-auth.tsx (+photoFilter in ProfileData).
+   846→- Next: frontend subagents will build global search UI (in Chats tab header), message pin UI (pin bar at top of chat + pin option in action menu), last-seen granularity helper, and profile photo filters in the Edit Profile dialog.
+   847→
+   848→---
+   849→Task ID: 16-search-pin
+   850→Agent: full-stack-developer (Global search + message pin)
+   851→Task: Surgically edited `src/components/fc/chat/ChatView.tsx` to add two round-6 features — global message search (in the ConversationList search bar) and message pin within 1:1 chats (pin bar + pin option in action menu + pinned indicator on bubble). Additive only — preserved all rounds 1-5 features (reactions, pin/mute-chat, search-within-chat, voice notes, delete/forward, star, disappearing, wallpaper, drafts, archive, message edit, group typing, PDF preview).
+   852→
+   853→Work Log:
+   854→- Read `/home/z/my-project/worklog.md` (full architecture + 16-backend entry confirms backend contracts: `GET /api/messages/search?q=QUERY` → `{ results: [{ messageId, content, type, createdAt, senderId, senderName, conversationType, peerId?, peerName?, peerUsername?, peerPhoto?, groupId?, groupName? }] }`; `POST /api/messages/[id]/pin` body `{ pinned: true|false }` → `{ ok, pinned }` (per-user, 1:1 only, auto-unpins previous); `GET /api/messages` now returns `pinnedBy` (userId or null) on each message). Verified the route files + the `pinnedBy: m.pinnedBy` line in `src/app/api/messages/route.ts` (both direct + group branches).
+   855→- Read the existing ChatView.tsx end-to-end (~3008 lines) to map the ConversationList search bar + Tabs structure, MessageBubble long-press action menu (Reply/Edit/Forward/Star/Copy/Delete + quick-reactions row), `highlight` helper (top-level function — hoisted, so usable from ConversationList despite being declared later in the file), `normalizeMessage` helper, ChatRoom state/effect layout, and the round-5 `groupTypingCount` derivation pattern (defined near the state decls to avoid temporal-dead-zone in the auto-scroll effect).
+   856→- Feature 1 (global message search):
+   857→  1. Added `GlobalSearchResult` interface (after `PeerInfo`) mirroring the backend payload.
+   858→  2. Added `globalResults`/`globalLoading` state + `globalSearchTimerRef` ref in `ConversationList`.
+   859→  3. Added a debounced `useEffect` (400ms) watching `query` — clears results on empty query, otherwise schedules `GET /api/messages/search?q=...`, parses `results`, sets loading state. Cleanup clears the timer on every query change so only the latest query triggers a request.
+   860→  4. Modified the search bar: updated placeholder to "Search chats and messages", added `pr-9` to the input + a clear-button (`X`) that appears when `query` is non-empty and clears it.
+   861→  5. Replaced the conditional render: when `query.trim()` is non-empty, the chat/group Tabs are replaced with a unified search dropdown containing TWO sections — "Conversations" (top 5 filtered chats + top 5 filtered groups, each a tappable row with avatar + name + meta) and "Messages" (global search results, each with `MessageSquare` icon + `<mark>`-highlighted content via the existing `highlight` helper + sender name + conversation name + `timeAgo`). Tapping any row opens the chat (`openChat` for direct, `openGroupChat` for group) and clears the query. Loading state shows a spinner; empty Messages section shows "No messages found"; total-empty shows an `EmptyState` with "No results".
+   862→- Feature 2 (message pin within chat):
+   863→  1. Added `pinnedBy?: string | null` to the `Message` interface (after `editedAt`).
+   864→  2. Updated `normalizeMessage` to map `pinnedBy: raw.pinnedBy ?? null`.
+   865→  3. Added `pinnedMessage` derivation in `ChatRoom` — defined RIGHT AFTER `groupTypingCount` (which itself was placed before the auto-scroll effect to avoid the round-5 temporal-dead-zone bug). Finds the first message where `pinnedBy === meId && !isDeletedForMe(m, meId)` (only one allowed by backend). null in group mode or when nothing is pinned.
+   866→  4. Added `togglePin` callback (1:1 only, gated by `mode === 'direct'`): optimistic update clears `pinnedBy` on any message I had pinned, then sets/clears on the target. POSTs `/api/messages/[id]/pin { pinned }`. Reverts target on error. Toasts success/error.
+   867→  5. Added `scrollToMessage` callback: looks up `[data-msg-id="ID"]` (CSS.escape'd) inside `scrollRef` and calls `scrollIntoView({ behavior: 'smooth', block: 'center' })`.
+   868→  6. Wrapped each `<MessageBubble>` in `<div key={m.id} data-msg-id={m.id}>` so the pin bar can find the bubble to scroll to. Visually identical wrapper (flex child of `flex flex-col gap-1`).
+   869→  7. Added `onPin?: (msg: Message) => void` prop to `MessageBubble` and passed `onPin={togglePin}` from `ChatRoom`.
+   870→  8. Added Pin/Unpin button in the MessageBubble action menu — placed AFTER Reply, BEFORE Edit. Only shown when `!isGroup && onPin` (1:1 chats only). Shows `PinOff` icon + "Unpin" when `msg.pinnedBy === meId`, otherwise `Pin` icon + "Pin".
+   871→  9. Added a pinned-message bar ABOVE the messages scroll area (below the header/search bar) — visible when `pinnedMessage && mode === 'direct'`. Styling: `mx-3 mt-2 flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2`. Shows `Pin` icon (primary), truncated content (single line, with media fallbacks `📷 Photo`/`🎥 Video`/`🎤 Audio`/`📄 Document`), sender name ("You" if mine), and an `X` button to unpin. The bar body (minus X) is a button calling `scrollToMessage(pinnedMessage.id)` to jump back to the pinned bubble.
+   872→  10. Added a pinned-by-me indicator at top-LEFT of the bubble (`Pin size={11} text-primary` in a `bg-card` chip with `ring-1 ring-border`) — mirrors the existing Star indicator at top-right. Same styling pattern, just left-aligned.
+   873→- Imports: added `PinOff, MessageSquare` to the lucide-react import block (Pin was already imported from earlier rounds).
+   874→- Verified: `bun run lint` → exit 0 (0 errors, 0 warnings). `curl http://localhost:3000/` → 200. Dev log shows clean recompile after edits.
+   875→
+   876→Stage Summary:
+   877→- Single file surgically edited: `/home/z/my-project/src/components/fc/chat/ChatView.tsx` (additive ~280 new lines; file grew from 3008 → 3354 lines). No existing code rewritten. Work notes: `/home/z/my-project/agent-ctx/16-search-pin-full-stack-developer.md`.
+   878→- All rounds 1-5 features preserved: reactions (QUICK_REACTIONS row + onReact/toggleReaction), pin/mute-chat (ConversationRow menu + preferences API), search-within-chat (searchOpen + runSearch + highlight), voice notes (startRecording/stopRecording + MediaRecorder), delete/forward (DeleteConfirmDialog + ForwardDialog + confirmDelete + onDeleted), star (toggleStar + StarredMessagesDialog), disappearing (handleDisappearingChange + ChatSettingsSheet), wallpaper (handleWallpaperChange + WALLPAPER_PRESETS), drafts (handleTextInput debounce-save + draft restore), archive (handleToggleArchive + archived section), message edit (handleEditSave + EditMessageDialog + onEdited realtime handler), group typing (groupTypingUsers Set + groupMembers Map + onGroupTyping handler + sender-aware label), PDF preview (isPdf + iframe + fallback). The new global search + pin features compose cleanly with all of the above.
+   879→- Backend untouched: no changes to realtime service, API routes, or Prisma schema. All work consumed the existing Task 16-backend contracts as documented in worklog.md.
+   880→- Lint clean (`bun run lint` → 0 errors / 0 warnings). Dev server returns 200 on `/`.
+   881→- Decisions: (1) Search dropdown REPLACES the Tabs when query is non-empty (instead of overlaying) — cleaner UX, avoids z-index/scroll fighting, and the user can simply clear the query to return to the normal chat list. (2) Global search uses the existing `highlight` helper (function declaration — hoisted) for `<mark>` highlighting so the visual matches the within-chat search. (3) `pinnedMessage` derived once near the top of ChatRoom (right after `groupTypingCount`) so any downstream effect/handler is safe from temporal-dead-zone (the exact bug that bit round 5). (4) Optimistic pin update mirrors the backend's "unpin previous, pin new" behavior — clear any pinned-by-me in the conversation, then set the target — so the pin bar updates instantly without waiting for the round-trip. (5) `scrollToMessage` uses `CSS.escape` on the message id for safety (Prisma cuids are alphanumeric so it's not strictly necessary, but defensive). (6) Pin option gated by `!isGroup && onPin` — `onPin` is only passed from `ChatRoom` (which is 1:1-only when pinning), so the gate is belt-and-suspenders. (7) Pinned indicator at top-LEFT mirrors the Star indicator at top-RIGHT — symmetric, doesn't visually clash.
+   882→
+   883→---
+   884→Task ID: 16-lastseen-filters
+   885→Agent: full-stack-developer (Last-seen + photo filters)
+   886→Task: Implement two frontend features described in Task 16-backend: (1) granular last-seen labels + a precise detail helper in src/lib/api.ts, consumed by ChatView (auto-pickup) and ProfileView (richer display); (2) profile photo filters — `UserAvatar` gains an optional `filter` CSS-filter prop, ProfileView shows a Sparkles filter-picker popover (9 presets) next to the camera button and applies the chosen filter live to both MyProfile and other-user profile avatars. Backend untouched.
+   887→
+   888→Work Log:
+   889→- Read /home/z/my-project/worklog.md end-to-end (Tasks 0 → 16-backend). Confirmed Task 16-backend added Profile.photoFilter + exposed it in /api/auth/me, /api/users/me, /api/users/[id]; updated ProfileData type to include photoFilter. Verified PUT /api/users/me treats photoFilter as a string field with empty-string → null. Verified AvatarImage passes `style` through to the underlying <img> (filter applies cleanly).
+   890→- Feature 1 — src/lib/api.ts:
+   891→  - Added private `isYesterday(d, now)` (calendar-day comparison, not 24h-window — handles 11:55pm/12:05am case) and `shortMonthDay(iso)`.
+   892→  - Rewrote `lastSeenText(online, lastSeen)` with the exact spec tier list: online → "online"; null/invalid → "offline"; future (clock skew) → "online"; <1m → "last seen just now"; <1h → "last seen {n}m ago"; <24h → "last seen {n}h ago"; calendar yesterday → "last seen yesterday"; <7d → "last seen {n}d ago"; older → "last seen {MMM d}". Same name + signature — backward compatible. ChatView header + ProfileView other-user status auto-pickup the new granularity.
+   893→  - Added `formatLastSeenPrecise(lastSeen): { label, detail }`. label = "online"/"offline"/"now"/"5m"/"2h"/"yesterday"/"Jan 5"; detail = "last seen 5 minutes ago at 3:42 PM". Treats lastSeen within 30s as effectively online (realtime service writes lastSeen on disconnect).
+   894→- Feature 2 — src/components/fc/ui.tsx:
+   895→  - Added `filter?: string | null` to `UserAvatar`. Normalizes null/undefined/"" /"none" → no filter. Applies `style={{ filter }}` to `<AvatarImage>` only — fallback (initials) and presence dot untouched.
+   896→- Feature 2 — src/components/fc/profile/ProfileView.tsx:
+   897→  - Added imports: `Popover, PopoverContent, PopoverTrigger`; `Sparkles, Loader2` to lucide; `formatLastSeenPrecise` to api; `cn` from `@/lib/utils`; `AuthUser` from `@/hooks/use-auth` (picker prop type).
+   898→  - Extended `ProfileResult.user` interface with `photoFilter: string | null` and `lastSeen?: string | null`.
+   899→  - Other-user profile header: `UserAvatar` now passes `filter={u.photoFilter}`; status `<p>` uses `lastSeenText(online, u.lastSeen)` (was `null`) and carries a `title` tooltip with `formatLastSeenPrecise(u.lastSeen).detail`.
+   900→  - MyProfile header: `UserAvatar` now passes `filter={p?.photoFilter}`; added a small `Active now` / last-active line below the email using `formatLastSeenPrecise(p?.lastSeen)` combined with `useSocket().isOnline(user.id)` (live socket presence wins over timestamp). Line hidden when both offline + lastSeen is null.
+   901→  - Added `PhotoFilterPicker` component + `PHOTO_FILTERS` preset array (9 presets: None, Grayscale, Sepia, Saturate, Contrast, Bright, Vintage, Cool, Warm). Sparkles button (`bg-primary/15 text-primary`, 8×8 round) sits next to the camera button in a flex cluster at the avatar bottom-right. Popover shows a 3-column grid of 48px avatar previews with the filter applied + name (`text-[10px]`); selected tile gets `ring-2 ring-primary` + sr-only "Selected" marker. Click: `PUT /api/users/me { photoFilter: '' | '<css-value>' }` → `await refresh()` → `toast.success('Photo filter updated')` → close popover. Loader2 spinner overlays the in-flight tile; all tiles disable during the request.
+   902→- Verified end-to-end with curl + demo accounts: login aria → PUT photoFilter "grayscale(1)" → GET /api/auth/me returns it ✓; PUT photoFilter "" → clears to null ✓; login bilal → GET /api/users/<aria-id> returns aria's photoFilter "sepia(0.6)" ✓ (cross-user visibility). Boundary tests for the helper logic: 5s → "online"; 45s → "now"; 5m → "5m" + "last seen 5 minutes ago at HH:MM PM"; 2h → "2h"; yesterday (26h) → "yesterday"; 10d → "Jan 5"-style date. All pass.
+   903→- `bun run lint` → 0 errors, 0 warnings. Dev server: `GET /` returns HTTP 200; recent dev.log shows `PUT /api/users/me 200` and `GET /api/users/<id> 200` from my test runs. No backend files touched.
+   904→
+   905→Stage Summary:
+   906→- Files edited (3, surgical): `src/lib/api.ts` (+79 lines: isYesterday + shortMonthDay + new lastSeenText + formatLastSeenPrecise), `src/components/fc/ui.tsx` (+4 lines: filter prop + apply to AvatarImage), `src/components/fc/profile/ProfileView.tsx` (~120 new lines: PhotoFilterPicker + PHOTO_FILTERS + filter prop wiring + last-active line + lastSeen threading). Work notes: `/home/z/my-project/agent-ctx/16-lastseen-filters-full-stack-developer.md`.
+   907→- All existing ProfileView features preserved (edit dialog, photo upload, privacy, details, friend actions, block/unblock) and UserAvatar unchanged for all existing callers (filter prop is optional + defaults to no filter).
+   908→- Backend untouched: no changes to realtime service, API routes, or Prisma schema. All work consumed the existing Task 16-backend contracts.
+   909→- Lint clean, dev 200, API smoke-tested end-to-end.
+   910→- Decisions: (1) `filter` prop normalized so "none" + "" + null + undefined all mean "no filter" — PHOTO_FILTERS uses "none" as the None-tile sentinel but the backend stores null (sent as ""). (2) "Yesterday" is a calendar-day check (not 24h-window) so 11:55pm-last-seen at 12:05am-today correctly says "yesterday" rather than "5m ago". (3) `formatLastSeenPrecise` treats lastSeen within 30s as "online" (realtime service writes lastSeen on disconnect, so a fresh timestamp implies socket alive); call sites can override with useSocket().isOnline() — MyProfile does. (4) Did NOT thread photoFilter through conversation-list / friends-list / HomeView endpoints — kept scoped to (a) current user via useAuth and (b) other-user profile via GET /api/users/[id], per task spec. Future agents can extend `UserAvatar filter={...}` to other surfaces trivially since the prop is now in place.
+   911→
+   912→---
+   913→Task ID: 16-frontend
+   914→Agent: orchestrator (Z.ai Code) — scheduled 15-min review (round 6, frontend + integration)
+   915→Task: Wire round 6 features frontend (global message search, message pin, last-seen granularity, profile photo filters) + integration QA + bug fix.
+   916→
+   917→Work Log:
+   918→- Dispatched 2 parallel subagents:
+   919→  - Task 16-search-pin: edited ChatView.tsx surgically. Global search: `globalResults`/`globalLoading` state + 400ms debounced search in ConversationList; when search box has text, shows unified dropdown with Conversations + Messages sections (each result tappable → opens conversation); uses existing `highlight` helper for `<mark>`. Message pin: `pinnedBy` in Message interface + normalizeMessage; Pin/Unpin in long-press action menu (1:1 only); pin bar at top of messages area (Pin icon + truncated content + sender + X unpin + tap-to-scroll); pin indicator on bubble; `togglePin` callback (optimistic, mirrors backend unpin-previous-pin-new); `scrollToMessage` via data-msg-id.
+   920→  - Task 16-lastseen-filters: edited api.ts (rewrote `lastSeenText` with tier ladder: online/just now/Nm/Nh/yesterday/Nd/MMM d; added `formatLastSeenPrecise` returning {label, detail}) + ui.tsx (UserAvatar gains optional `filter` prop applied to AvatarImage via style) + ProfileView.tsx (MyProfile: filter button next to camera opens Popover with 9 presets — None/Grayscale/Sepia/Saturate/Contrast/Bright/Vintage/Cool/Warm — each a 48px preview tile; PUT /api/users/me { photoFilter } → refresh → toast; other-user profile passes filter + precise last-seen tooltip).
+   921→- **CRITICAL BUG FOUND + FIXED during QA**: opening any chat threw "Runtime ReferenceError: Cannot access 'meId' before initialization" (temporal dead zone — same pattern as round 5). The subagent placed `const pinnedMessage = mode === 'direct' && meId ? ... : null` at line 1015, but the ChatRoom's `meId` is declared at line 1033 (after it). Fixed by moving `pinnedMessage` definition to after `meId` (line 1037) and leaving a comment noting the TDZ constraint. Lint clean after fix.
+   922→- Integration QA via agent-browser (gateway 81, mobile 390x844, nextjs-portal hidden):
+   923→  - Login as aria → Chats → typed "test" in search → MESSAGES section shows global results (Editable test message, Reaction test message, Live realtime cross-user test, etc. with sender + conversation + time) ✓
+   924→  - Cleared search → opened Bilal chat → opens without error (after bug fix) ✓
+   925→  - Chat header shows "last seen 2h ago" (granular last-seen) ✓
+   926→  - Long-press last message → action menu shows Pin (between Reply and Edit) ✓
+   927→  - Clicked Pin → DB confirms pinnedBy:"el7v" (Aria) → pin bar appears at top with message content + "You" → 2 pin icons render (bar + bubble) ✓
+   928→  - Profile → "Photo filters" button → picker shows 9 presets with "None Selected" → picked Grayscale → API confirms photoFilter:"grayscale(1)" persisted ✓
+   929→  - No errors. `bun run lint` clean (0 errors). Gateway 200. Realtime 200.
+   930→
+   931→Stage Summary:
+   932→- Round 6 complete: 4 new features (global message search, message pin within chat, last-seen granularity, profile photo filters) all shipped + browser-verified. 1 critical bug fixed (meId temporal-dead-zone in pinnedMessage). All additive — zero existing code/features removed.
+   933→- New files: src/app/api/messages/search/route.ts, src/app/api/messages/[id]/pin/route.ts.
+   934→- Modified (surgical): prisma/schema.prisma (+Profile.photoFilter, +Message.pinnedBy), src/app/api/messages/route.ts (+pinnedBy), src/app/api/auth/me/route.ts (+photoFilter), src/app/api/users/me/route.ts (+photoFilter), src/app/api/users/[id]/route.ts (+photoFilter), src/hooks/use-auth.tsx (+photoFilter in ProfileData), src/lib/api.ts (rewrote lastSeenText + added formatLastSeenPrecise), src/components/fc/ui.tsx (UserAvatar +filter prop), src/components/fc/profile/ProfileView.tsx (+photo filter picker), src/components/fc/chat/ChatView.tsx (+global search + message pin + meId TDZ fix).
+   935→- Lint clean, dev 200, realtime 200, all features QA'd.
+   936→- Cumulative feature set now: auth, profiles (view/edit/privacy/**photo-filters**), friends (search/request/accept/reject/remove/block/suggestions/online-widget), 1:1+group chat (realtime/typing/presence/**granular-last-seen**/status/file-sharing/voice-notes/emoji/reactions/delete/forward/star/disappearing/wallpaper/**global-search**/search-within/pin-chat/mute/archive/drafts/edit/group-typing/**message-pin**), stories (create/view/auto-advance/replies), WebRTC calls (stats), groups CRUD, notifications, settings, dark mode, file previews (PDF inline).
+   937→- Recommended next-phase features: group calls, message scheduling, chat export, story highlights, broadcast lists, chat wallpapers custom upload, typing status in conversation list, message reply with quote, profile photo cropping, call recordings.
+   938→
+   939→---
+   940→Task ID: 17-backend
+   941→Agent: orchestrator (Z.ai Code) — scheduled 15-min review (round 7, backend)
+   942→Task: Backend for round 7 features: message reply-with-quote, story highlights, (typing-status-in-conv-list + custom-wallpaper-upload are frontend-only or use existing endpoints).
+   943→
+   944→Work Log:
+   945→- DB (additive): added `replyToId String?` to Message (stores id of the message being replied to). Added `isHighlight Boolean @default(false)` to Story (highlighted stories don't expire). Ran `bun run db:push` + `bun run db:generate` — success.
+   946→- API (new routes, no existing endpoints renamed):
+   947→  - `POST /api/stories/[id]/highlight` body `{ highlight: true|false }` — toggle story highlight (owner only). Highlighted stories are saved from expiry.
+   948→- API (modified, backward-compatible):
+   949→  - `GET /api/messages` (both 1:1 + group): now includes `replyToId` (string or null) in each message response.
+   950→  - `GET /api/stories`: where clause now `OR: [{ expiresAt: { gt: now } }, { isHighlight: true }]` so highlights persist after expiry. Each story now returns `isHighlight`. Response groups stories into `stories` (active) + `highlights` (saved) per user.
+   951→- Realtime: updated `SendMsgPayload` + `GroupSendPayload` interfaces to accept `replyToId?: string`. Both `message:send` + `group:message:send` db.message.create calls now set `replyToId: data.replyToId || null`.
+   952→- Note on typing-status-in-conv-list: the existing `typing:indicator` + `group:typing:indicator` socket events already broadcast typing to peers. The frontend ConversationList will subscribe to these to show "typing…" in conversation rows. No backend change needed.
+   953→- Note on custom-wallpaper-upload: the existing `POST /api/files/upload` + `POST /api/messages/preferences { wallpaper }` endpoints already support this — the frontend will upload an image → use its url as the wallpaper value. No backend change needed.
+   954→- Restarted realtime mini-service + Next dev server. Verified: gateway 200, realtime 200, /api/stories/x/highlight → 405 (POST only).
+   955→- `bun run lint` clean (0 errors).
+   956→
+   957→Stage Summary:
+   958→- Backend for message reply-with-quote + story highlights is complete. Typing-status-in-conv-list + custom-wallpaper-upload are frontend-only (consume existing endpoints). Frontend not yet wired.
+   959→- New files: src/app/api/stories/[id]/highlight/route.ts.
+   960→- Modified: prisma/schema.prisma (+Message.replyToId, +Story.isHighlight), src/app/api/messages/route.ts (+replyToId), src/app/api/stories/route.ts (+isHighlight, +highlights grouping, OR clause for expired highlights), mini-services/realtime/index.ts (+replyToId in payloads + create calls).
+   961→- Next: frontend subagents will build reply-with-quote UI in ChatView, typing-status in ConversationList, custom wallpaper upload in chat settings, and story highlights in StoriesBar/StoryViewer.
+   962→
+   963→---
+   964→Task ID: 17-wallpaper-highlights
+   965→Agent: full-stack-developer (Custom wallpaper + story highlights)
+   966→Task: Surgically extended ChatView.tsx (custom chat wallpaper upload in the ChatSettingsSheet) and StoriesBar.tsx + StoryViewer.tsx (story highlights — saved stories that don't expire). Additive only — preserved all rounds 1–6 features.
+   967→
+   968→Work Log:
+   969→- Read worklog.md end-to-end to learn the architecture + the round-7 backend contracts (already shipped by task 17-backend: `POST /api/files/upload`, `POST /api/messages/preferences { wallpaper }`, `GET /api/stories` with `stories` + `highlights` grouping + `isHighlight` flag, `POST /api/stories/[id]/highlight`).
+   970→- Verified the existing ChatSettingsSheet structure: 8 preset wallpaper swatches in a 4-col grid (`aspect-[2/5]`), `handleWallpaperChange` does optimistic set + POST `/api/messages/preferences` + toast, the messages scroll area already applies `style={{ background: wallpaper }}`.
+   971→- Verified the existing StoriesBar/StoryViewer: horizontal stories row + create dialog + full-screen viewer (progress bars, auto-advance rAF timer, tap zones, keyboard nav, touch swipe, replies).
+   972→- Feature 1 (ChatView.tsx):
+   973→  - Added `Camera, Image as ImageIcon` to the lucide imports.
+   974→  - Added `handleCustomWallpaperUpload(file)` in ChatRoom: validates image, `uploadFile(file)` → builds `url('${uploaded.url}')` (single-quoted for special-char safety), `setWallpaper(value)`, POST preferences, toast `Custom wallpaper set`, reverts on error.
+   975→  - Passed `onCustomWallpaperUpload={handleCustomWallpaperUpload}` to ChatSettingsSheet.
+   976→  - Extended ChatSettingsSheet props with `onCustomWallpaperUpload?: (file: File) => Promise<void>`.
+   977→  - Added `uploading` state + `fileInputRef` + `isCustomWallpaper` (regex `/^url\(/i`) + `handleCustomPick` change handler.
+   978→  - Added a 9th tile in the Wallpaper grid: `bg-muted`, `aspect-[2/5]`, centered `ImageIcon` + `Custom` label in `text-[9px]`, `Loader2` spinner while uploading, `Check` badge + `ring-primary` when active wallpaper is a custom url. Hidden `<input type="file" accept="image/*">` triggers upload → on success closes the sheet.
+   979→- Feature 2 (StoryViewer.tsx):
+   980→  - Added `Bookmark` to lucide imports.
+   981→  - Added `isHighlight: boolean` to `StoryItem` interface.
+   982→  - Added `startIndex?: number` + `onHighlightChange?: (storyId, isHighlight) => void` to StoryViewerProps.
+   983→  - `useState` for `index` now initialises from `startIndex` (clamped to `[0, stories.length)`).
+   984→  - Added `highlightOverrides: Record<string, boolean>` + `highlightBusy` state for optimistic UI.
+   985→  - Added `handleToggleHighlight` callback: optimistic local override → POST `/api/stories/[id]/highlight` → toast → `onHighlightChange?.()` → revert on error.
+   986→  - Derived `isHighlighted = highlightOverrides[current.id] ?? current.isHighlight`.
+   987→  - Added bookmark button at `absolute right-16 top-4 z-20` (next to close), `bg-black/40 backdrop-blur rounded-full`, filled (`fill-current text-primary`) when highlighted, `Loader2` while busy, only rendered when `user.isMe`.
+   988→- Feature 2 (StoriesBar.tsx):
+   989→  - Added `Bookmark` to lucide imports, `SectionTitle` to `@/components/fc/ui` imports.
+   990→  - Added `highlights: StoryItem[]` to `StoryUser` interface.
+   991→  - Replaced `viewerUser` state with `viewer: { user, list: 'stories' | 'highlights', startIndex? } | null` so the same viewer can show either list.
+   992→  - Added `highlights: []` to the synthetic `myGroup` fallback.
+   993→  - `ordered` (main stories row) now filters out friends with only highlights (they appear exclusively in the highlights section).
+   994→  - Added `highlightEntries` (flat list of `{ user, story }` across me + friends) for the highlights row.
+   995→  - Added `openHighlightAt(g, storyId)` that opens the viewer on a user's highlights array at the tapped highlight's index.
+   996→  - Rendered a `HIGHLIGHTS` section (`mt-3`, `SectionTitle`) below the stories row: horizontal scroll of 40px circular thumbnails (image preview for image stories, gradient bg + tiny text snippet for text stories) with a bookmark badge + truncated username label.
+   997→  - Updated the StoryViewer invocation to pass `stories` from the chosen list, `startIndex`, and `onHighlightChange={() => load()}` so the parent refreshes after a toggle.
+   998→  - Added `HighlightThumbnail` helper component (image vs text rendering).
+   999→- Lint: `bun run lint` → 0 errors, 0 warnings.
+  1000→- Dev server: confirmed `GET / 200` in `dev.log`; no compile errors.
+  1001→
+  1002→Stage Summary:
+  1003→- Two round-7 frontend features shipped surgically with zero regression to existing ChatView (reactions, pin/mute, search, voice notes, delete/forward, star, disappearing, preset wallpaper, drafts, archive, edit, group-typing, global search, message pin, PDF preview) and StoriesBar/StoryViewer (stories bar, create dialog, viewer, replies, auto-advance, tap zones, keyboard nav, touch swipe).
+  1004→- Files modified (additive only):
+  1005→  - `src/components/fc/chat/ChatView.tsx` — +`Camera`/`ImageIcon` imports, +`handleCustomWallpaperUpload`, +`onCustomWallpaperUpload` prop on ChatSettingsSheet, +Custom wallpaper tile + hidden file input + uploading state.
+  1006→  - `src/components/fc/stories/StoryViewer.tsx` — +`Bookmark` import, +`isHighlight` on StoryItem, +`startIndex`/`onHighlightChange` props, +`highlightOverrides`/`highlightBusy` state, +`handleToggleHighlight`, +bookmark button.
+  1007→  - `src/components/fc/stories/StoriesBar.tsx` — +`Bookmark`/`SectionTitle` imports, +`highlights` on StoryUser, +`viewer` state (replaces `viewerUser`), +`highlightEntries`, +`openHighlightAt`, +HIGHLIGHTS section, +`HighlightThumbnail` helper.
+  1008→- Decisions:
+  1009→  1. Custom wallpaper value stored as `url('${uploaded.url}')` (single-quoted) so special chars in the URL don't break the CSS value; the existing `style={{ background: wallpaper }}` on the messages scroll area handles it transparently.
+  1010→  2. `isCustomWallpaper` detected via `/^url\(/i` regex so the Custom tile shows the selected ring + Check badge when an uploaded image is active.
+  1011→  3. StoryViewer uses a local `highlightOverrides` map (instead of cloning the stories array) so the bookmark icon flips immediately on toggle without disturbing the rest of the viewer's state. The parent is notified via `onHighlightChange` so the highlights section refreshes, but `viewer.user` retains its old object reference so the open viewer's `stories` prop stays stable (no index shifting mid-view).
+  1012→  4. `startIndex` prop on StoryViewer lets the user open the viewer directly on a specific highlight (rather than always starting at index 0).
+  1013→  5. Main stories row filters out friends with only highlights (no active stories) — they appear exclusively in the HIGHLIGHTS section, avoiding dead avatar clicks.
+  1014→  6. Bookmark button at `right-16 top-4 z-20` per spec (next to the close button which sits in the z-30 header), with `bg-black/40 backdrop-blur` pill so it stays legible over any story background.
+  1015→  7. For other users' highlights, the viewer is read-only — no bookmark button since `user.isMe` is false.
+  1016→- Backend, realtime service, API routes, Prisma schema — untouched.
+  1017→- Cumulative feature set now: auth, profiles (view/edit/privacy/photo-filters), friends (search/request/accept/reject/remove/block/suggestions/online-widget), 1:1+group chat (realtime/typing/presence/granular-last-seen/status/file-sharing/voice-notes/emoji/reactions/delete/forward/star/disappearing/wallpaper/**custom-wallpaper-upload**/global-search/search-within/pin-chat/mute/archive/drafts/edit/group-typing/message-pin), stories (create/view/auto-advance/replies/**highlights**), WebRTC calls (stats), groups CRUD, notifications, settings, dark mode, file previews (PDF inline).
+  1018→
+  1019→---
+  1020→Task ID: 17-reply-typing
+  1021→Agent: full-stack-developer (Reply-with-quote + typing in conv list)
+  1022→Task: Surgically edited `src/components/fc/chat/ChatView.tsx` to add two round-7 features — (1) message reply-with-quote (long-press Reply sets a replyTo state + preview bar above input + replyToId in socket payload + tappable quote card inside the bubble) and (2) typing status in conversation list (subscribe to typing:indicator + group:typing:indicator, show "typing…" / "Someone is typing…" with 3s auto-expiry). Additive only — preserved all rounds 1-6 features (reactions, pin/mute-chat, search-within-chat, voice notes, delete/forward, deleted-placeholder, forwarded-indicator, star, disappearing, wallpaper + custom wallpaper upload, drafts, archive, message edit, group typing, PDF preview, global search, message pin, last-seen granularity).
+  1023→
+  1024→Work Log:
+  1025→- Read `/home/z/my-project/worklog.md` end-to-end (architecture + Task 17-backend entry confirms: `GET /api/messages` now returns `replyToId: string | null` on each message; socket `message:send` / `group:message:send` accept `replyToId?: string` in the payload; the message object emitted via `message:new` / `group:message:new` includes `replyToId`; `typing:indicator` server→client `{ userId, isTyping }` (1:1); `group:typing:indicator` server→client `{ groupId, userId, isTyping }`). Verified `RT.TYPING_INDICATOR` + `RT.GROUP_TYPING_INDICATOR` are in `src/lib/constants.ts`. Verified `replyToId` is persisted in both realtime service `message.create` calls (lines 192 + 384).
+  1026→- Read the existing ChatView.tsx end-to-end (3454 lines) to map: Message interface + normalizeMessage, ConversationList structure + realtime useEffect, ConversationRow + GroupRow layouts, ChatRoom state declarations + load-history effect + socket effect + sendMessage helper + sendText + handleReply, MessageBubble signature + action menu + bubble content layout, existing `scrollToMessage` helper from round-6 message-pin (used for tap-to-scroll on the pinned-message bar).
+  1027→- Feature 1 (message reply-with-quote):
+  1028→  1. Added `replyToId?: string | null` to the `Message` interface (after `pinnedBy`).
+  1029→  2. Updated `normalizeMessage` to map `replyToId: raw.replyToId ?? null` — single helper covers both REST + socket payloads.
+  1030→  3. Replaced the existing `handleReply` (which previously just inserted an "@reply" text prefix) with `setReplyTo(msg)`.
+  1031→  4. Added `replyTo` state (`Message | null`) in ChatRoom alongside the other state. Cleared on peerId-change (added `setReplyTo(null)` in the load-history effect's reset block) + cleared inside `sendMessage` after the emit fires + cleared via the X button on the preview bar.
+  1032→  5. Updated `sendMessage` to: (a) include `replyToId: replyTo?.id ?? null` on the optimistic message (so the quote card renders immediately, before the server ack), (b) include `payload.replyToId = replyTo.id` when `replyTo` is set, (c) call `setReplyTo(null)` after `socket.emit(...)` (the optimistic bubble already carries replyToId so the quote card stays visible; we don't need to wait for the ack). Added `replyTo` to `sendMessage`'s deps array.
+  1033→  6. Added a reply preview bar above the input bar (between messages area + input): `mx-2 mb-1 flex items-center gap-2 rounded-lg border-l-2 border-primary bg-muted/60 px-3 py-2` — `CornerUpLeft` icon + sender name (`text-xs font-semibold text-primary`) + truncated content (`truncate text-xs text-muted-foreground`) + X cancel button. Tapping the bar (minus X) scrolls to the replied-to bubble via the existing `scrollToMessage` helper.
+  1034→  7. Added `replyToMessage?: Message | null` + `replyPeerName?: string` + `onJumpToMessage?: (msgId: string) => void` props to `MessageBubble`. The parent resolves `replyToMessage` per-message via `messages.find((rm) => rm.id === m.replyToId)` (falls back to null when not loaded).
+  1035→  8. Added a reply quote card at the top of the bubble (after the Star indicator, before the type-specific content): `mb-1 w-full rounded-r-md border-l-2 border-primary/50 bg-black/5 px-2 py-1` (dark variant `dark:bg-white/5`). Sender name `text-[11px] font-semibold text-primary`, content `truncate text-[11px] opacity-70`. The card is a `<button>` — tapping it scrolls to the original message via `onJumpToMessage(replyToMessage.id)` (no-op when the original isn't loaded). When the replied-to message was deleted-for-everyone, the card shows "🚫 This message was deleted" (uses existing `isDeletedForMe` helper). When the original isn't in the local messages array (e.g. older than the loaded page), the card shows "Original message" placeholder.
+  1036→  9. Sender-name resolution: if the replied-to message's senderName is null (which happens for direct messages loaded from /api/messages since the API doesn't include senderName for 1:1), falls back to `replyPeerName` (the peer's display name passed in from ChatRoom's `peerInfo?.name` in direct mode) so the card shows the peer's name instead of "Unknown".
+  1037→  10. Added `CornerUpLeft` to the lucide-react imports.
+  1038→- Feature 2 (typing status in conversation list):
+  1039→  1. Added `typingConvs: Set<string>` state + `typingTimersRef: Map<string, ReturnType<typeof setTimeout>>` ref in ConversationList. Keys: `userId` for 1:1, `group:${groupId}` for groups.
+  1040→  2. Added a new useEffect (deps `[socket, meId]`) that subscribes to `RT.TYPING_INDICATOR` + `RT.GROUP_TYPING_INDICATOR`. Filters out the user's own id (defensive — server already excludes the typer for group events). On `isTyping:true`: adds the key to the Set + schedules a 3s auto-expiry timer that removes the key. On `isTyping:false`: clears the timer + removes the key. Cleanup clears all timers + the Set on unmount.
+  1041→  3. Added `isTyping?: boolean` prop to both `ConversationRow` + `GroupRow`. Passed `typingConvs.has(c.id)` / `typingConvs.has(\`group:${g.id}\`)` from ConversationList.
+  1042→  4. In `ConversationRow`: typing takes priority over both draft + last-message preview (most time-sensitive info wins, matches WhatsApp). When typing, shows `truncate text-xs italic text-primary` "typing…" with the unread badge still rendered alongside.
+  1043→  5. In `GroupRow`: when typing, the member-count subtitle is replaced with `truncate text-xs italic text-primary` "Someone is typing…" (skipped the name lookup for simplicity per task spec).
+  1044→- Avoided temporal-dead-zone errors (the round-5 + round-6 bugs): declared `replyTo` state alongside the other ChatRoom state (well before any effect that references it); declared `typingConvs` + `typingTimersRef` near the other ConversationList state (before any effect that uses them).
+  1045→- Ran `bun run lint` → 0 errors, 0 warnings. Verified `curl http://localhost:3000/` returns HTTP 200. Dev log shows clean recompiles after edits.
+  1046→
+  1047→Stage Summary:
+  1048→- Single file surgically edited: `/home/z/my-project/src/components/fc/chat/ChatView.tsx` (additive ~268 new lines; file grew from 3454 → 3722 lines). No existing code rewritten. Work notes: `/home/z/my-project/agent-ctx/17-reply-typing-full-stack-developer.md`.
+  1049→- All rounds 1-6 features preserved: reactions (QUICK_REACTIONS row + onReact/toggleReaction), pin/mute-chat (ConversationRow menu + preferences API), search-within-chat (searchOpen + runSearch + highlight), voice notes (startRecording/stopRecording + MediaRecorder), delete/forward (DeleteConfirmDialog + ForwardDialog + confirmDelete + onDeleted), deleted-placeholder (isDeletedForMe), forwarded-indicator (msg.forwardedFrom), star (toggleStar + StarredMessagesDialog), disappearing (handleDisappearingChange + ChatSettingsSheet), wallpaper + custom-wallpaper-upload (handleWallpaperChange + handleCustomWallpaperUpload + WALLPAPER_PRESETS), drafts (handleTextInput debounce-save + draft restore), archive (handleToggleArchive + archived section), message edit (handleEditSave + EditMessageDialog + onEdited realtime handler), group typing (groupTypingUsers Set + groupMembers Map + onGroupTyping handler + sender-aware label), PDF preview (isPdf + iframe + fallback), global search (globalResults + debounced 400ms GET /api/messages/search), message pin (pinnedMessage derivation + togglePin + scrollToMessage + pin bar + pin indicator), last-seen granularity (lastSeenText from api.ts). The new reply-with-quote + typing-in-conv-list features compose cleanly with all of the above.
+  1050→- Backend untouched: no changes to realtime service, API routes, or Prisma schema. All work consumed the existing Task 17-backend contracts as documented in worklog.md.
+  1051→- Lint clean (`bun run lint` → 0 errors / 0 warnings). Dev server returns 200 on `/`.
+  1052→- Decisions: (1) Single `normalizeMessage` covers both REST + socket — added `replyToId` once, flows through both load paths. (2) Reply state cleared inside `sendMessage` (not `sendText`) so file uploads with a reply also work + clear correctly. (3) Optimistic bubble carries `replyToId` so the quote card renders immediately (before the server ack). (4) Quote card tap is a no-op when the original isn't loaded — shows "Original message" placeholder. (5) Typing auto-expiry = 3s per entry; timer is reset on every subsequent isTyping:true. (6) Typing priority in conv row: typing > draft > last-message (matches WhatsApp). (7) Used `rounded-r-md` instead of the spec's literal `rounded-r` since Tailwind v4 doesn't reliably support unsized side-radius utilities — visual result is identical. (8) `replyPeerName` prop on MessageBubble lets the quote card show the peer's name in 1:1 chats even when the message's `senderName` field is null (which is the case for direct messages loaded from /api/messages). (9) Defensive `userId === meId` filter in the typing subscription — server already excludes the typer for group broadcasts + 1:1 typing is emitted to the receiver only, but the check is harmless. (10) ConversationList unmount/remount when opening a chat clears all typing timers — acceptable since the user sees the typing indicator in the open chat header during that window anyway, and the next isTyping:true arrives within 1.5s when they return to the list.
+  1053→
+  1054→---
+  1055→Task ID: 17-frontend
+  1056→Agent: orchestrator (Z.ai Code) — scheduled 15-min review (round 7, frontend + integration)
+  1057→Task: Wire round 7 features frontend (message reply-with-quote, typing status in conv list, custom wallpaper upload, story highlights) + integration QA.
+  1058→
+  1059→Work Log:
+  1060→- Dispatched 2 parallel subagents:
+  1061→  - Task 17-reply-typing: edited ChatView.tsx surgically. Reply-with-quote: `replyToId` in Message interface + normalizeMessage; Reply in action menu now sets `replyTo` state (replaced old @reply prefix); reply preview bar above input (border-l-2 border-primary + sender + content + X); send includes `replyToId` in socket payload; quote card in bubble (border-l-2 + sender + truncated content + tap-to-scroll); "Original message" placeholder if not loaded; deleted-placeholder for deleted originals. Typing in conv list: `typingConvs` Set + 3s auto-expiry timers; subscribes to TYPING_INDICATOR + GROUP_TYPING_INDICATOR; ConversationRow shows "typing…" (primary italic) instead of last-message preview; GroupRow shows "Someone is typing…".
+  1062→  - Task 17-wallpaper-highlights: edited ChatView.tsx (Custom wallpaper tile in ChatSettingsSheet — 9th tile with ImageIcon + "Custom" label + Loader2 spinner; uploadFile → url('...') → POST preferences; ring-primary when active) + StoriesBar.tsx (HIGHLIGHTS section below stories row — 40px circular thumbnails with bookmark badge; friends with only highlights filtered to highlights section) + StoryViewer.tsx (Bookmark button at top-right — POST /api/stories/[id]/highlight; optimistic + toast; read-only for other users' highlights; startIndex prop to open directly on a highlight).
+  1063→- Integration QA via agent-browser (gateway 81, mobile 390x844, nextjs-portal hidden):
+  1064→  - Login as aria → Chats → Bilal chat → opens without error ✓
+  1065→  - Long-press "Reaction test message" → action menu shows Reply → clicked → reply preview bar appears ("You / Reaction test message") ✓
+  1066→  - Typed "Replying to your message!" → Send → last bubble shows quote card ("You / Reaction test message" → "Replying to your message!") → DB confirms replyToId set ✓
+  1067→  - Chat settings → Wallpaper section → "Upload custom wallpaper" tile present ✓
+  1068→  - Home → own story → StoryViewer → "Add to highlights" bookmark button → clicked → API confirms 1 highlight ✓
+  1069→  - No errors. `bun run lint` clean (0 errors). Gateway 200. Realtime 200.
+  1070→
+  1071→Stage Summary:
+  1072→- Round 7 complete: 4 new features (message reply-with-quote, typing status in conversation list, custom wallpaper upload, story highlights) all shipped + browser-verified. All additive — zero existing code/features removed.
+  1073→- New files: src/app/api/stories/[id]/highlight/route.ts.
+  1074→- Modified (surgical): prisma/schema.prisma (+Message.replyToId, +Story.isHighlight), src/app/api/messages/route.ts (+replyToId), src/app/api/stories/route.ts (+isHighlight + highlights grouping + OR clause), mini-services/realtime/index.ts (+replyToId in payloads + create calls), src/components/fc/chat/ChatView.tsx (+reply-with-quote + typing-in-conv-list + custom wallpaper tile), src/components/fc/stories/StoriesBar.tsx (+highlights section), src/components/fc/stories/StoryViewer.tsx (+bookmark/highlight button).
+  1075→- Lint clean, dev 200, realtime 200, all features QA'd.
+  1076→- Cumulative feature set now: auth, profiles (view/edit/privacy/photo-filters), friends (search/request/accept/reject/remove/block/suggestions/online-widget), 1:1+group chat (realtime/typing/presence/granular-last-seen/status/file-sharing/voice-notes/emoji/reactions/delete/forward/star/disappearing/wallpaper/**custom-wallpaper**/global-search/search-within/pin-chat/mute/archive/drafts/edit/group-typing/message-pin/**reply-with-quote**/**typing-in-conv-list**), stories (create/view/auto-advance/replies/**highlights**), WebRTC calls (stats), groups CRUD, notifications, settings, dark mode, file previews (PDF inline).
+  1077→- Recommended next-phase features: group calls, message scheduling, chat export, broadcast lists, profile photo cropping, call recordings, message forwarding to multiple, chat backup/restore, mute stories, close friends list, story reactions.
+  1078→
+  1079→---
+  1080→Task ID: 18-backend
+  1081→Agent: orchestrator (Z.ai Code) — scheduled 15-min review (round 8, backend)
+  1082→Task: Backend for round 8 features: close friends list, message scheduling, story reactions, mute stories.
+  1083→
+  1084→Work Log:
+  1085→- DB (additive): added `isCloseFriend Boolean @default(false)` + `storiesMuted Boolean @default(false)` to Friendship. Added `scheduledFor DateTime?` to Message. Added new `StoryReaction` model (id, storyId, userId, emoji, createdAt; @@unique [storyId,userId]). Added `reactions StoryReaction[]` relation to Story + `storyReactions StoryReaction[]` to User. Ran `bun run db:push` + `bun run db:generate` — success.
+  1086→- API (new routes, no existing endpoints renamed):
+  1087→  - `GET/POST /api/friends/close` — GET returns close friends list; POST `{ targetId, action: 'closeFriend'|'muteStories', value: boolean }` toggles.
+  1088→  - `GET/POST/DELETE /api/messages/scheduled` — GET lists scheduled messages; POST creates a scheduled message (scheduledFor in future, stored but not sent); DELETE cancels.
+  1089→  - `GET/POST /api/stories/[id]/reactions` — GET lists reactions; POST reacts (upsert — one reaction per user per story, replaces existing).
+  1090→- API (modified, backward-compatible):
+  1091→  - `GET /api/messages` (1:1): now filters out not-yet-due scheduled messages (scheduledFor > now) in addition to expired disappearing ones.
+  1092→  - `GET /api/stories`: now includes `reactions` in Prisma include; each story returns `reactionCount` + `myReaction` (emoji or null). Also fetches friendships to determine `storiesMuted` per user; skips active stories from muted-story users (still shows their highlights); adds `storiesMuted: boolean` per user entry.
+  1093→- Restarted realtime mini-service + Next dev server. Verified: gateway 200, realtime 200, /api/friends/close → 401, /api/messages/scheduled → 401, /api/stories/x/reactions → 401 (all need auth = correct).
+  1094→- `bun run lint` clean (0 errors).
+  1095→- Note: scheduled messages are stored with `scheduledFor` in the future + `status: SENT`. A future enhancement would add a background job/cron to deliver them (emit socket message:new) when scheduledFor arrives. For now they're stored + listed + cancellable. The frontend will show them in a "Scheduled" section.
+  1096→
+  1097→Stage Summary:
+  1098→- Backend for close friends, message scheduling, story reactions, mute stories is complete. Frontend not yet wired.
+  1099→- New files: src/app/api/friends/close/route.ts, src/app/api/messages/scheduled/route.ts, src/app/api/stories/[id]/reactions/route.ts.
+  1100→- Modified: prisma/schema.prisma (+Friendship.isCloseFriend/storiesMuted, +Message.scheduledFor, +StoryReaction model, +Story.reactions relation), src/app/api/messages/route.ts (+scheduledFor filter), src/app/api/stories/route.ts (+reactions include + reactionCount/myReaction + storiesMuted filter).
+
+[showing lines 800-1100 of 1102; use offset=1101 with limit to continue reading]

@@ -1,0 +1,7 @@
+{
+  "name": "friendconnect-worker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": { "dev": "bun --hot index.ts" },
+  "dependencies": { "bullmq": "^5.0.0" }
+}

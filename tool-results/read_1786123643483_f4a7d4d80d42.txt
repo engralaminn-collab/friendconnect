@@ -1,0 +1,2002 @@
+     1→'use client'
+     2→/* eslint-disable react-hooks/set-state-in-effect */
+     3→
+     4→import * as React from 'react'
+     5→import { useEffect, useState, useRef, useCallback } from 'react'
+     6→import { useApp } from '@/lib/store'
+     7→import { useAuth } from '@/hooks/use-auth'
+     8→import { useSocket } from '@/hooks/use-socket'
+     9→import { RT } from '@/lib/constants'
+    10→import { api, uploadFile, clockTime, timeAgo, lastSeenText } from '@/lib/api'
+    11→import { UserAvatar, EmptyState, SectionTitle } from '@/components/fc/ui'
+    12→import { Input } from '@/components/ui/input'
+    13→import { Textarea } from '@/components/ui/textarea'
+    14→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+    15→import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+    16→import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogFooter } from '@/components/ui/dialog'
+    17→import {
+    18→  AlertDialog,
+    19→  AlertDialogContent,
+    20→  AlertDialogHeader,
+    21→  AlertDialogTitle,
+    22→  AlertDialogDescription,
+    23→  AlertDialogFooter,
+    24→  AlertDialogAction,
+    25→  AlertDialogCancel,
+    26→} from '@/components/ui/alert-dialog'
+    27→import { Checkbox } from '@/components/ui/checkbox'
+    28→import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+    29→import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+    30→import { Label } from '@/components/ui/label'
+    31→import { Button } from '@/components/ui/button'
+    32→import { toast } from 'sonner'
+    33→import { cn } from '@/lib/utils'
+    34→import {
+    35→  ArrowLeft,
+    36→  Phone,
+    37→  Video,
+    38→  Send,
+    39→  Paperclip,
+    40→  Smile,
+    41→  Check,
+    42→  CheckCheck,
+    43→  Clock,
+    44→  FileText,
+    45→  Download,
+    46→  Search,
+    47→  Users,
+    48→  MessageCircle,
+    49→  Loader2,
+    50→  Pin,
+    51→  Bell,
+    52→  BellOff,
+    53→  Mic,
+    54→  X,
+    55→  Trash2,
+    56→  Heart,
+    57→  Forward,
+    58→  Copy,
+    59→  Reply,
+    60→  Star,
+    61→  MoreVertical,
+    62→  Timer,
+    63→} from 'lucide-react'
+    64→
+    65→// ---------------- types ----------------
+    66→type MessageType = 'text' | 'image' | 'video' | 'audio' | 'document'
+    67→type MessageStatus = 'SENDING' | 'SENT' | 'DELIVERED' | 'SEEN'
+    68→
+    69→interface Reaction {
+    70→  emoji: string
+    71→  userId: string
+    72→  userName: string
+    73→}
+    74→
+    75→interface Conversation {
+    76→  id: string
+    77→  username: string
+    78→  name: string
+    79→  photoUrl: string | null
+    80→  unread: number
+    81→  pinned?: boolean
+    82→  muted?: boolean
+    83→  lastMessage: {
+    84→    content: string
+    85→    type: string
+    86→    senderId: string
+    87→    createdAt: string
+    88→    status: string
+    89→  } | null
+    90→}
+    91→
+    92→interface GroupLite {
+    93→  id: string
+    94→  name: string
+    95→  description: string | null
+    96→  photoUrl: string | null
+    97→  role: string
+    98→  memberCount: number
+    99→  createdAt: string
+   100→}
+   101→
+   102→interface Message {
+   103→  id: string
+   104→  tempId?: string
+   105→  senderId: string
+   106→  senderName?: string | null
+   107→  senderPhoto?: string | null
+   108→  receiverId?: string | null
+   109→  groupId?: string | null
+   110→  content: string
+   111→  type: MessageType
+   112→  fileUrl?: string | null
+   113→  fileName?: string | null
+   114→  fileSize?: number | null
+   115→  mimeType?: string | null
+   116→  status?: MessageStatus
+   117→  createdAt: string
+   118→  reactions?: Reaction[]
+   119→  deletedFor?: string
+   120→  forwardedFrom?: string | null
+   121→  starred?: boolean
+   122→  expiresAt?: string | null
+   123→}
+   124→
+   125→interface Friend {
+   126→  id: string
+   127→  username: string
+   128→  name: string
+   129→  photoUrl: string | null
+   130→  lastSeen: string | null
+   131→}
+   132→
+   133→interface PeerInfo {
+   134→  name: string
+   135→  photoUrl: string | null
+   136→  username?: string
+   137→  lastSeen?: string | null
+   138→  memberCount?: number
+   139→}
+   140→
+   141→const EMOJIS = [
+   142→  '😀', '😄', '😁', '😂', '🥹', '😊', '😍', '😘',
+   143→  '😎', '🤔', '😴', '😭', '😡', '🥳', '😇', '🙃',
+   144→  '👍', '👎', '🙏', '👏', '🙌', '🤝', '👋', '✌️',
+   145→  '🤞', '💪', '❤️', '🧡', '💛', '💚', '💙', '💜',
+   146→  '🔥', '✨', '🎉', '🎁', '💯', '⭐', '🌟', '☀️',
+   147→  '🌙', '🌈', '☕', '🍕', '🍔', '🍟', '🍦', '🍓',
+   148→  '🌸', '🌺', '🐶', '🐱', '🦄', '🐢', '🦋', '🐝',
+   149→  '⚽', '🏀', '🎵', '🎮', '📱', '💻', '📚', '✅',
+   150→  '❌', '❓', '❗', '🚀', '👀', '🫶', '🤗', '🫡',
+   151→]
+   152→
+   153→// ---------------- helpers ----------------
+   154→function formatBytes(bytes: number | null | undefined): string {
+   155→  if (bytes === null || bytes === undefined) return ''
+   156→  if (bytes === 0) return '0 B'
+   157→  const units = ['B', 'KB', 'MB', 'GB']
+   158→  let n = bytes
+   159→  let i = 0
+   160→  while (n >= 1024 && i < units.length - 1) {
+   161→    n /= 1024
+   162→    i++
+   163→  }
+   164→  return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`
+   165→}
+   166→
+   167→function fileTypeFromMime(mime: string | null | undefined): MessageType {
+   168→  if (!mime) return 'document'
+   169→  if (mime.startsWith('image/')) return 'image'
+   170→  if (mime.startsWith('video/')) return 'video'
+   171→  if (mime.startsWith('audio/')) return 'audio'
+   172→  return 'document'
+   173→}
+   174→
+   175→function linkify(text: string): React.ReactNode[] {
+   176→  const parts = text.split(/(https?:\/\/[^\s]+)/g)
+   177→  return parts.map((part, i) => {
+   178→    if (/^https?:\/\//.test(part)) {
+   179→      return (
+   180→        <a key={i} href={part} target="_blank" rel="noreferrer" className="underline break-all">
+   181→          {part}
+   182→        </a>
+   183→      )
+   184→    }
+   185→    return <span key={i}>{part}</span>
+   186→  })
+   187→}
+   188→
+   189→function toISO(d: any): string {
+   190→  if (!d) return new Date().toISOString()
+   191→  if (typeof d === 'string') return d
+   192→  if (d instanceof Date) return d.toISOString()
+   193→  try {
+   194→    return new Date(d).toISOString()
+   195→  } catch {
+   196→    return new Date().toISOString()
+   197→  }
+   198→}
+   199→
+   200→function newTempId(): string {
+   201→  return `t_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+   202→}
+   203→
+   204→function normalizeMessage(raw: any): Message {
+   205→  return {
+   206→    id: raw.id,
+   207→    senderId: raw.senderId,
+   208→    senderName: raw.senderName ?? raw.sender?.name ?? null,
+   209→    senderPhoto: raw.senderPhoto ?? raw.sender?.profile?.photoUrl ?? null,
+   210→    receiverId: raw.receiverId ?? null,
+   211→    groupId: raw.groupId ?? null,
+   212→    content: raw.content ?? '',
+   213→    type: (raw.type ?? 'text') as MessageType,
+   214→    fileUrl: raw.fileUrl ?? null,
+   215→    fileName: raw.fileName ?? null,
+   216→    fileSize: raw.fileSize ?? null,
+   217→    mimeType: raw.mimeType ?? null,
+   218→    status: (raw.status ?? 'SENT') as MessageStatus,
+   219→    createdAt: toISO(raw.createdAt),
+   220→    reactions: Array.isArray(raw.reactions) ? raw.reactions.map((r: any) => ({ emoji: r.emoji, userId: r.userId, userName: r.userName })) : [],
+   221→    deletedFor: raw.deletedFor ?? '',
+   222→    forwardedFrom: raw.forwardedFrom ?? null,
+   223→    starred: !!raw.starred,
+   224→    expiresAt: raw.expiresAt ?? null,
+   225→  }
+   226→}
+   227→
+   228→// A message is rendered as the "🚫 This message was deleted" placeholder when
+   229→// it was deleted for everyone OR explicitly deleted-for-me (deletedFor is a
+   230→// comma-separated list of user ids, or the literal 'everyone').
+   231→function isDeletedForMe(msg: Message, meId?: string): boolean {
+   232→  if (!msg.deletedFor) return false
+   233→  if (msg.deletedFor === 'everyone') return true
+   234→  if (!meId) return false
+   235→  return msg.deletedFor
+   236→    .split(',')
+   237→    .map((s) => s.trim())
+   238→    .filter(Boolean)
+   239→    .includes(meId)
+   240→}
+   241→
+   242→function lastMessagePreview(c: Conversation, meId: string | undefined): string {
+   243→  if (!c.lastMessage) return 'Tap to start chatting'
+   244→  const lm = c.lastMessage
+   245→  const prefix = meId && lm.senderId === meId ? 'You: ' : ''
+   246→  if (lm.type === 'image') return `${prefix}📷 Photo`
+   247→  if (lm.type === 'video') return `${prefix}🎥 Video`
+   248→  if (lm.type === 'audio') return `${prefix}🎤 Audio`
+   249→  if (lm.type === 'document') return `${prefix}📄 Document`
+   250→  return `${prefix}${lm.content}`
+   251→}
+   252→
+   253→// ---------------- main entry ----------------
+   254→export function ChatView() {
+   255→  const activeChatUserId = useApp((s) => s.activeChatUserId)
+   256→  const activeChatGroupId = useApp((s) => s.activeChatGroupId)
+   257→  const back = useCallback(() => {
+   258→    useApp.setState({ activeChatUserId: null, activeChatGroupId: null })
+   259→  }, [])
+   260→
+   261→  if (activeChatUserId) {
+   262→    return <ChatRoom mode="direct" peerId={activeChatUserId} onBack={back} />
+   263→  }
+   264→  if (activeChatGroupId) {
+   265→    return <ChatRoom mode="group" peerId={activeChatGroupId} onBack={back} />
+   266→  }
+   267→  return <ConversationList />
+   268→}
+   269→
+   270→// ---------------- conversation list ----------------
+   271→function ConversationList() {
+   272→  const [tab, setTab] = useState<'chats' | 'groups'>('chats')
+   273→  const [query, setQuery] = useState('')
+   274→  const [conversations, setConversations] = useState<Conversation[]>([])
+   275→  const [groups, setGroups] = useState<GroupLite[]>([])
+   276→  const [loading, setLoading] = useState(true)
+   277→  const { openChat, openGroupChat } = useApp()
+   278→  const { socket, isOnline } = useSocket()
+   279→  const { user: me } = useAuth()
+   280→  const meId = me?.id
+   281→
+   282→  const load = useCallback(async () => {
+   283→    setLoading(true)
+   284→    try {
+   285→      const [c, g] = await Promise.all([
+   286→        api<{ conversations: Conversation[] }>('/api/messages/conversations').catch(() => ({ conversations: [] as Conversation[] })),
+   287→        api<{ groups: GroupLite[] }>('/api/groups').catch(() => ({ groups: [] as GroupLite[] })),
+   288→      ])
+   289→      setConversations(c.conversations)
+   290→      setGroups(g.groups)
+   291→    } catch (e: any) {
+   292→      toast.error(e?.message || 'Failed to load')
+   293→    } finally {
+   294→      setLoading(false)
+   295→    }
+   296→  }, [])
+   297→
+   298→  useEffect(() => {
+   299→    load()
+   300→  }, [load])
+   301→
+   302→  // realtime: refresh lastMessage + unread when a new message arrives
+   303→  useEffect(() => {
+   304→    if (!socket || !meId) return
+   305→    const onNew = (raw: any) => {
+   306→      if (!raw || raw.groupId) return
+   307→      const peerId = raw.senderId === meId ? raw.receiverId : raw.senderId
+   308→      if (!peerId) return
+   309→      setConversations((prev) => {
+   310→        const exists = prev.find((c) => c.id === peerId)
+   311→        const lm = {
+   312→          content: raw.content || '',
+   313→          type: raw.type || 'text',
+   314→          senderId: raw.senderId,
+   315→          createdAt: toISO(raw.createdAt),
+   316→          status: raw.status || 'SENT',
+   317→        }
+   318→        const unreadInc = raw.receiverId === meId ? 1 : 0
+   319→        if (exists) {
+   320→          const updated: Conversation = {
+   321→            ...exists,
+   322→            lastMessage: lm,
+   323→            unread: exists.unread + unreadInc,
+   324→          }
+   325→          return [updated, ...prev.filter((c) => c.id !== peerId)]
+   326→        }
+   327→        // unknown peer — refetch to populate name/photo
+   328→        load()
+   329→        return prev
+   330→      })
+   331→    }
+   332→    const onStatus = ({ id, status }: { id: string; status: string }) => {
+   333→      setConversations((prev) =>
+   334→        prev.map((c) =>
+   335→          c.lastMessage && c.lastMessage.senderId === meId && c.lastMessage.status !== status
+   336→            ? { ...c, lastMessage: { ...c.lastMessage, status } }
+   337→            : c
+   338→        )
+   339→      )
+   340→    }
+   341→    const onGroupNew = (raw: any) => {
+   342→      if (!raw?.groupId) return
+   343→      // bump group to top by re-fetching once (lightweight)
+   344→      load()
+   345→    }
+   346→    socket.on(RT.MESSAGE_NEW, onNew)
+   347→    socket.on(RT.MESSAGE_STATUS, onStatus as any)
+   348→    socket.on(RT.GROUP_MESSAGE_NEW, onGroupNew as any)
+   349→    return () => {
+   350→      socket.off(RT.MESSAGE_NEW, onNew)
+   351→      socket.off(RT.MESSAGE_STATUS, onStatus as any)
+   352→      socket.off(RT.GROUP_MESSAGE_NEW, onGroupNew as any)
+   353→    }
+   354→  }, [socket, meId, load])
+   355→
+   356→  const q = query.trim().toLowerCase()
+   357→  const filteredConvs = q
+   358→    ? conversations.filter((c) => c.name.toLowerCase().includes(q) || c.username.toLowerCase().includes(q))
+   359→    : conversations
+   360→  const filteredGroups = q
+   361→    ? groups.filter((g) => g.name.toLowerCase().includes(q) || (g.description || '').toLowerCase().includes(q))
+   362→    : groups
+   363→
+   364→  const totalUnread = conversations.reduce((s, c) => s + c.unread, 0)
+   365→
+   366→  return (
+   367→    <div className="flex h-full flex-col">
+   368→      <div className="border-b border-border px-4 py-3">
+   369→        <div className="mb-3 flex items-center justify-between">
+   370→          <h1 className="text-xl font-bold">Chats</h1>
+   371→          {totalUnread > 0 && (
+   372→            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
+   373→              {totalUnread} unread
+   374→            </span>
+   375→          )}
+   376→        </div>
+   377→        <div className="relative">
+   378→          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+   379→          <Input
+   380→            value={query}
+   381→            onChange={(e) => setQuery(e.target.value)}
+   382→            placeholder="Search chats and groups"
+   383→            className="rounded-xl pl-9"
+   384→          />
+   385→        </div>
+   386→      </div>
+   387→
+   388→      <Tabs value={tab} onValueChange={(v) => setTab(v as 'chats' | 'groups')} className="flex flex-1 flex-col overflow-hidden">
+   389→        <TabsList className="mx-4 mt-3 grid grid-cols-2 rounded-xl">
+   390→          <TabsTrigger value="chats" className="text-xs">
+   391→            Chats
+   392→            {totalUnread > 0 && (
+   393→              <span className="ml-1 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
+   394→                {totalUnread > 9 ? '9+' : totalUnread}
+   395→              </span>
+   396→            )}
+   397→          </TabsTrigger>
+   398→          <TabsTrigger value="groups" className="text-xs">
+   399→            Groups
+   400→            {groups.length > 0 && (
+   401→              <span className="ml-1 text-[10px] font-normal text-muted-foreground">{groups.length}</span>
+   402→            )}
+   403→          </TabsTrigger>
+   404→        </TabsList>
+   405→
+   406→        <TabsContent value="chats" className="fc-scroll m-0 flex-1 overflow-y-auto p-2">
+   407→          {loading ? (
+   408→            <div className="space-y-1 p-2">
+   409→              {[0, 1, 2, 3, 4].map((i) => (
+   410→                <ConvRowSkeleton key={i} />
+   411→              ))}
+   412→            </div>
+   413→          ) : filteredConvs.length === 0 ? (
+   414→            <EmptyState
+   415→              icon={<MessageCircle size={36} />}
+   416→              title={q ? 'No matching chats' : 'No conversations yet'}
+   417→              description={q ? 'Try a different search.' : 'Add a friend and say hello to start chatting.'}
+   418→            />
+   419→          ) : (
+   420→            <div className="space-y-0.5">
+   421→              {filteredConvs.map((c) => (
+   422→                <ConversationRow
+   423→                  key={c.id}
+   424→                  conversation={c}
+   425→                  online={isOnline(c.id)}
+   426→                  meId={meId}
+   427→                  onOpen={() => openChat(c.id)}
+   428→                  onTogglePin={async () => {
+   429→                    try {
+   430→                      await api('/api/messages/preferences', { method: 'POST', body: JSON.stringify({ peerId: c.id, pinned: !c.pinned }) })
+   431→                      setConversations((prev) => prev.map((x) => (x.id === c.id ? { ...x, pinned: !x.pinned } : x)))
+   432→                    } catch (e: any) { toast.error(e.message) }
+   433→                  }}
+   434→                  onToggleMute={async () => {
+   435→                    try {
+   436→                      await api('/api/messages/preferences', { method: 'POST', body: JSON.stringify({ peerId: c.id, muted: !c.muted }) })
+   437→                      setConversations((prev) => prev.map((x) => (x.id === c.id ? { ...x, muted: !x.muted } : x)))
+   438→                    } catch (e: any) { toast.error(e.message) }
+   439→                  }}
+   440→                />
+   441→              ))}
+   442→            </div>
+   443→          )}
+   444→        </TabsContent>
+   445→
+   446→        <TabsContent value="groups" className="fc-scroll m-0 flex-1 overflow-y-auto p-2">
+   447→          {loading ? (
+   448→            <div className="space-y-1 p-2">
+   449→              {[0, 1, 2, 3].map((i) => (
+   450→                <ConvRowSkeleton key={i} />
+   451→              ))}
+   452→            </div>
+   453→          ) : filteredGroups.length === 0 ? (
+   454→            <EmptyState
+   455→              icon={<Users size={36} />}
+   456→              title={q ? 'No matching groups' : 'No groups yet'}
+   457→              description={q ? 'Try a different search.' : 'Create a group from the Groups tab to chat with multiple friends.'}
+   458→            />
+   459→          ) : (
+   460→            <div className="space-y-0.5">
+   461→              {filteredGroups.map((g) => (
+   462→                <GroupRow key={g.id} group={g} onOpen={() => openGroupChat(g.id)} />
+   463→              ))}
+   464→            </div>
+   465→          )}
+   466→        </TabsContent>
+   467→      </Tabs>
+   468→    </div>
+   469→  )
+   470→}
+   471→
+   472→function ConversationRow({
+   473→  conversation,
+   474→  online,
+   475→  meId,
+   476→  onOpen,
+   477→  onTogglePin,
+   478→  onToggleMute,
+   479→}: {
+   480→  conversation: Conversation
+   481→  online: boolean
+   482→  meId?: string
+   483→  onOpen: () => void
+   484→  onTogglePin: () => void
+   485→  onToggleMute: () => void
+   486→}) {
+   487→  const [menuOpen, setMenuOpen] = useState(false)
+   488→  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+   489→  const [pinned, setPinned] = useState(!!conversation.pinned)
+   490→  const [muted, setMuted] = useState(!!conversation.muted)
+   491→
+   492→  useEffect(() => {
+   493→    setPinned(!!conversation.pinned)
+   494→    setMuted(!!conversation.muted)
+   495→  }, [conversation.pinned, conversation.muted])
+   496→
+   497→  const startPress = () => {
+   498→    pressTimer.current = setTimeout(() => setMenuOpen(true), 500)
+   499→  }
+   500→  const cancelPress = () => {
+   501→    if (pressTimer.current) clearTimeout(pressTimer.current)
+   502→  }
+   503→
+   504→  return (
+   505→    <div className="relative">
+   506→      <button
+   507→        onClick={onOpen}
+   508→        onPointerDown={startPress}
+   509→        onPointerUp={cancelPress}
+   510→        onPointerLeave={cancelPress}
+   511→        className={cn(
+   512→          'flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition-colors hover:bg-accent/50',
+   513→          pinned && 'bg-primary/5'
+   514→        )}
+   515→      >
+   516→        <UserAvatar name={conversation.name} src={conversation.photoUrl} size={48} online={online} />
+   517→        <div className="min-w-0 flex-1">
+   518→          <div className="flex items-baseline justify-between gap-2">
+   519→            <span className="flex min-w-0 items-center gap-1 truncate text-sm font-semibold">
+   520→              <span className="truncate">{conversation.name}</span>
+   521→              {pinned && <Pin size={11} className="shrink-0 text-primary" />}
+   522→              {muted && <BellOff size={11} className="shrink-0 text-muted-foreground" />}
+   523→            </span>
+   524→            {conversation.lastMessage && (
+   525→              <span className="shrink-0 text-[10px] text-muted-foreground">
+   526→                {timeAgo(conversation.lastMessage.createdAt)}
+   527→              </span>
+   528→            )}
+   529→          </div>
+   530→          <div className="flex items-center justify-between gap-2">
+   531→            <span
+   532→              className={cn(
+   533→                'truncate text-xs',
+   534→                conversation.unread > 0 && !muted ? 'font-medium text-foreground' : 'text-muted-foreground'
+   535→              )}
+   536→            >
+   537→              {lastMessagePreview(conversation, meId)}
+   538→            </span>
+   539→            {conversation.unread > 0 && (
+   540→              <span
+   541→                className={cn(
+   542→                  'grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 text-[10px] font-bold',
+   543→                  muted ? 'bg-muted text-muted-foreground' : 'bg-primary text-primary-foreground'
+   544→                )}
+   545→              >
+   546→                {conversation.unread > 9 ? '9+' : conversation.unread}
+   547→              </span>
+   548→            )}
+   549→          </div>
+   550→        </div>
+   551→      </button>
+   552→      {menuOpen && (
+   553→        <>
+   554→          <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
+   555→          <div className="absolute right-2 top-12 z-30 w-44 overflow-hidden rounded-xl border border-border bg-popover p-1 shadow-xl fc-rise">
+   556→            <button
+   557→              onClick={() => { onTogglePin(); setPinned((p) => !p); setMenuOpen(false) }}
+   558→              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-accent"
+   559→            >
+   560→              <Pin size={14} /> {pinned ? 'Unpin chat' : 'Pin chat'}
+   561→            </button>
+   562→            <button
+   563→              onClick={() => { onToggleMute(); setMuted((m) => !m); setMenuOpen(false) }}
+   564→              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-accent"
+   565→            >
+   566→              {muted ? <Bell size={14} /> : <BellOff size={14} />} {muted ? 'Unmute' : 'Mute notifications'}
+   567→            </button>
+   568→          </div>
+   569→        </>
+   570→      )}
+   571→    </div>
+   572→  )
+   573→}
+   574→
+   575→function GroupRow({ group, onOpen }: { group: GroupLite; onOpen: () => void }) {
+   576→  return (
+   577→    <button
+   578→      onClick={onOpen}
+   579→      className="flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition-colors hover:bg-accent/50"
+   580→    >
+   581→      {group.photoUrl ? (
+   582→        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full ring-1 ring-border">
+   583→          <img src={group.photoUrl} alt={group.name} className="h-full w-full object-cover" />
+   584→        </div>
+   585→      ) : (
+   586→        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-primary/15 text-primary ring-1 ring-border">
+   587→          <Users size={22} />
+   588→        </div>
+   589→      )}
+   590→      <div className="min-w-0 flex-1">
+   591→        <div className="flex items-baseline justify-between gap-2">
+   592→          <span className="truncate text-sm font-semibold">{group.name}</span>
+   593→          <span className="shrink-0 text-[10px] text-muted-foreground">{timeAgo(group.createdAt)}</span>
+   594→        </div>
+   595→        <div className="truncate text-xs text-muted-foreground">
+   596→          {group.memberCount} {group.memberCount === 1 ? 'member' : 'members'}
+   597→          {group.description ? ` · ${group.description}` : ''}
+   598→        </div>
+   599→      </div>
+   600→    </button>
+   601→  )
+   602→}
+   603→
+   604→function ConvRowSkeleton() {
+   605→  return (
+   606→    <div className="flex items-center gap-3 rounded-xl p-2.5">
+   607→      <div className="h-12 w-12 shrink-0 animate-pulse rounded-full bg-muted" />
+   608→      <div className="flex-1 space-y-2">
+   609→        <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
+   610→        <div className="h-3 w-3/4 animate-pulse rounded bg-muted" />
+   611→      </div>
+   612→    </div>
+   613→  )
+   614→}
+   615→
+   616→// ---------------- chat room (direct + group) ----------------
+   617→function ChatRoom({
+   618→  mode,
+   619→  peerId,
+   620→  onBack,
+   621→}: {
+   622→  mode: 'direct' | 'group'
+   623→  peerId: string
+   624→  onBack: () => void
+   625→}) {
+   626→  const { user: me } = useAuth()
+   627→  const { socket, isOnline } = useSocket()
+   628→  const [messages, setMessages] = useState<Message[]>([])
+   629→  const [peerInfo, setPeerInfo] = useState<PeerInfo | null>(null)
+   630→  const [loading, setLoading] = useState(true)
+   631→  const [text, setText] = useState('')
+   632→  const [peerTyping, setPeerTyping] = useState(false)
+   633→  const [uploading, setUploading] = useState(false)
+   634→  const [imagePreview, setImagePreview] = useState<string | null>(null)
+   635→  const [loadingOlder, setLoadingOlder] = useState(false)
+   636→  const [hasMore, setHasMore] = useState(true)
+   637→  const [searchQuery, setSearchQuery] = useState('')
+   638→  const [searchOpen, setSearchOpen] = useState(false)
+   639→  const [recording, setRecording] = useState(false)
+   640→  const [recordSecs, setRecordSecs] = useState(0)
+   641→  const [deleteTarget, setDeleteTarget] = useState<Message | null>(null)
+   642→  const [forwardTarget, setForwardTarget] = useState<Message | null>(null)
+   643→  const [settingsOpen, setSettingsOpen] = useState(false)
+   644→  const [starredDialogOpen, setStarredDialogOpen] = useState(false)
+   645→  const [disappearing, setDisappearing] = useState<'OFF' | '24H' | '7D'>('OFF')
+   646→  const [wallpaper, setWallpaper] = useState<string | null>(null)
+   647→
+   648→  const scrollRef = useRef<HTMLDivElement>(null)
+   649→  const bottomRef = useRef<HTMLDivElement>(null)
+   650→  const fileInputRef = useRef<HTMLInputElement>(null)
+   651→  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+   652→  const atBottomRef = useRef(true)
+   653→  const oldestTsRef = useRef<string | null>(null)
+   654→  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+   655→  const recordedChunksRef = useRef<Blob[]>([])
+   656→  const recordStreamRef = useRef<MediaStream | null>(null)
+   657→  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+   658→  const prevHeightRef = useRef(0)
+   659→  const skipAutoScrollRef = useRef(false)
+   660→  const meId = me?.id
+   661→
+   662→  // ---- load history + peer info ----
+   663→  useEffect(() => {
+   664→    let cancelled = false
+   665→    setLoading(true)
+   666→    setMessages([])
+   667→    setHasMore(true)
+   668→    setPeerTyping(false)
+   669→    setPeerInfo(null)
+   670→    oldestTsRef.current = null
+   671→    atBottomRef.current = true
+   672→
+   673→    const endpoint = `/api/messages?${mode === 'direct' ? 'userId' : 'groupId'}=${encodeURIComponent(peerId)}`
+   674→
+   675→    Promise.all([
+   676→      api<{ messages: Message[] }>(endpoint)
+   677→        .then((d) => d.messages)
+   678→        .catch((e: any) => {
+   679→          toast.error(e?.message || 'Failed to load messages')
+   680→          return [] as Message[]
+   681→        }),
+   682→      mode === 'direct'
+   683→        ? api<{ friends: Friend[] }>('/api/friends')
+   684→            .then((d) => d.friends.find((f) => f.id === peerId) || null)
+   685→            .then((friend): PeerInfo | null => {
+   686→              if (friend) {
+   687→                return {
+   688→                  name: friend.name,
+   689→                  photoUrl: friend.photoUrl,
+   690→                  username: friend.username,
+   691→                  lastSeen: friend.lastSeen,
+   692→                }
+   693→              }
+   694→              // fallback to conversations endpoint (peer may not be a friend yet but has messages)
+   695→              return api<{ conversations: Conversation[] }>('/api/messages/conversations')
+   696→                .then((d) => {
+   697→                  const c = d.conversations.find((c) => c.id === peerId)
+   698→                  return c
+   699→                    ? { name: c.name, photoUrl: c.photoUrl, username: c.username, lastSeen: null }
+   700→                    : null
+   701→                })
+   702→                .catch(() => null)
+   703→            })
+   704→            .catch(() => null)
+   705→        : api<{ groups: GroupLite[] }>('/api/groups')
+   706→            .then((d) => {
+   707→              const g = d.groups.find((g) => g.id === peerId)
+   708→              return g
+   709→                ? { name: g.name, photoUrl: g.photoUrl, memberCount: g.memberCount }
+   710→                : null
+   711→            })
+   712→            .catch(() => null),
+   713→    ])
+   714→      .then(([msgs, info]) => {
+   715→        if (cancelled) return
+   716→        const normalized = msgs.map(normalizeMessage)
+   717→        setMessages(normalized)
+   718→        if (normalized.length > 0) oldestTsRef.current = normalized[0].createdAt
+   719→        if (normalized.length < 50) setHasMore(false)
+   720→        if (info) setPeerInfo(info)
+   721→      })
+   722→      .finally(() => {
+   723→        if (!cancelled) setLoading(false)
+   724→      })
+   725→
+   726→    return () => {
+   727→      cancelled = true
+   728→    }
+   729→  }, [mode, peerId])
+   730→
+   731→  // ---- load chat preferences (disappearing + wallpaper) for this peer ----
+   732→  useEffect(() => {
+   733→    setDisappearing('OFF')
+   734→    setWallpaper(null)
+   735→    let cancelled = false
+   736→    api<{ preferences: Array<{ peerId: string; disappearing: string; wallpaper: string | null }> }>(
+   737→      '/api/messages/preferences'
+   738→    )
+   739→      .then((d) => {
+   740→        if (cancelled) return
+   741→        const p = d.preferences?.find((x) => x.peerId === peerId)
+   742→        if (p) {
+   743→          setDisappearing(p.disappearing === '24H' || p.disappearing === '7D' ? p.disappearing : 'OFF')
+   744→          setWallpaper(p.wallpaper ?? null)
+   745→        }
+   746→      })
+   747→      .catch(() => {})
+   748→    return () => {
+   749→      cancelled = true
+   750→    }
+   751→  }, [peerId])
+   752→
+   753→  // ---- jump to bottom after first load ----
+   754→  useEffect(() => {
+   755→    if (loading) return
+   756→    const id = requestAnimationFrame(() => {
+   757→      bottomRef.current?.scrollIntoView({ block: 'end' })
+   758→    })
+   759→    return () => cancelAnimationFrame(id)
+   760→  }, [loading])
+   761→
+   762→  // ---- auto-scroll on new messages ----
+   763→  useEffect(() => {
+   764→    if (loading) return
+   765→    if (skipAutoScrollRef.current) {
+   766→      skipAutoScrollRef.current = false
+   767→      return
+   768→    }
+   769→    if (loadingOlder) return
+   770→    if (!atBottomRef.current) return
+   771→    const id = requestAnimationFrame(() => {
+   772→      bottomRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
+   773→    })
+   774→    return () => cancelAnimationFrame(id)
+   775→  }, [messages.length, peerTyping, loading, loadingOlder])
+   776→
+   777→  // ---- socket subscriptions ----
+   778→  useEffect(() => {
+   779→    if (!socket || !meId) return
+   780→
+   781→    const isRelevant = (raw: any): boolean => {
+   782→      if (!raw) return false
+   783→      if (mode === 'direct') {
+   784→        if (raw.groupId) return false
+   785→        return (
+   786→          (raw.senderId === peerId && raw.receiverId === meId) ||
+   787→          (raw.senderId === meId && raw.receiverId === peerId)
+   788→        )
+   789→      }
+   790→      return raw.groupId === peerId
+   791→    }
+   792→
+   793→    const onNew = (raw: any) => {
+   794→      if (!isRelevant(raw)) return
+   795→      const msg = normalizeMessage(raw)
+   796→      setMessages((prev) => {
+   797→        if (prev.some((m) => m.id === msg.id)) return prev
+   798→        return [...prev, msg]
+   799→      })
+   800→      // mark realtime incoming 1:1 messages as seen
+   801→      if (mode === 'direct' && msg.senderId === peerId && msg.receiverId === meId) {
+   802→        socket.emit(RT.MESSAGE_SEEN, { messageId: msg.id })
+   803→      }
+   804→    }
+   805→
+   806→    const onStatus = ({ id, status }: { id: string; status: string }) => {
+   807→      setMessages((prev) =>
+   808→        prev.map((m) => (m.id === id ? { ...m, status: status as MessageStatus } : m))
+   809→      )
+   810→    }
+   811→
+   812→    const onTyping = ({ userId, isTyping }: { userId: string; isTyping: boolean }) => {
+   813→      if (mode === 'direct' && userId === peerId) setPeerTyping(isTyping)
+   814→    }
+   815→
+   816→    const onReaction = ({ messageId, userId, emoji, action }: { messageId: string; userId: string; emoji: string; action: 'add' | 'remove' }) => {
+   817→      setMessages((prev) =>
+   818→        prev.map((m) => {
+   819→          if (m.id !== messageId) return m
+   820→          const reactions = m.reactions ? [...m.reactions] : []
+   821→          if (action === 'add') {
+   822→            if (!reactions.some((r) => r.userId === userId && r.emoji === emoji)) {
+   823→              reactions.push({ emoji, userId, userName: '' })
+   824→            }
+   825→          } else {
+   826→            const idx = reactions.findIndex((r) => r.userId === userId && r.emoji === emoji)
+   827→            if (idx >= 0) reactions.splice(idx, 1)
+   828→          }
+   829→          return { ...m, reactions }
+   830→        })
+   831→      )
+   832→    }
+   833→
+   834→    // Realtime message delete: when another participant deletes a message for
+   835→    // everyone, the server emits message:deleted { messageId, scope:'everyone' }.
+   836→    // We swap the local message for the "🚫 This message was deleted" placeholder.
+   837→    const onDeleted = ({ messageId, scope }: { messageId: string; scope: string }) => {
+   838→      if (scope !== 'everyone') return
+   839→      setMessages((prev) =>
+   840→        prev.map((m) =>
+   841→          m.id === messageId
+   842→            ? {
+   843→                ...m,
+   844→                deletedFor: 'everyone',
+   845→                content: '',
+   846→                fileUrl: null,
+   847→                fileName: null,
+   848→                fileSize: null,
+   849→                mimeType: null,
+   850→                type: 'text',
+   851→                reactions: [],
+   852→              }
+   853→            : m
+   854→        )
+   855→      )
+   856→    }
+   857→
+   858→    socket.on(RT.MESSAGE_NEW, onNew)
+   859→    socket.on(RT.GROUP_MESSAGE_NEW, onNew)
+   860→    socket.on(RT.MESSAGE_STATUS, onStatus)
+   861→    socket.on(RT.TYPING_INDICATOR, onTyping)
+   862→    socket.on(RT.REACTION_UPDATE, onReaction)
+   863→    socket.on(RT.MESSAGE_DELETED, onDeleted)
+   864→
+   865→    return () => {
+   866→      socket.off(RT.MESSAGE_NEW, onNew)
+   867→      socket.off(RT.GROUP_MESSAGE_NEW, onNew)
+   868→      socket.off(RT.MESSAGE_STATUS, onStatus)
+   869→      socket.off(RT.TYPING_INDICATOR, onTyping)
+   870→      socket.off(RT.REACTION_UPDATE, onReaction)
+   871→      socket.off(RT.MESSAGE_DELETED, onDeleted)
+   872→      if (mode === 'direct') {
+   873→        socket.emit(RT.TYPING, { receiverId: peerId, isTyping: false })
+   874→      }
+   875→      if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
+   876→    }
+   877→  }, [socket, meId, peerId, mode])
+   878→
+   879→  // ---- toggle reaction on a message ----
+   880→  const toggleReaction = useCallback(
+   881→    (messageId: string, emoji: string) => {
+   882→      if (!socket) return
+   883→      setMessages((prev) =>
+   884→        prev.map((m) => {
+   885→          if (m.id !== messageId) return m
+   886→          const reactions = m.reactions ? [...m.reactions] : []
+   887→          const existing = reactions.find((r) => r.userId === meId && r.emoji === emoji)
+   888→          if (existing) {
+   889→            const idx = reactions.indexOf(existing)
+   890→            reactions.splice(idx, 1)
+   891→            socket.emit(RT.REACTION_REMOVE, { messageId, emoji })
+   892→          } else {
+   893→            reactions.push({ emoji, userId: meId, userName: me?.name || '' })
+   894→            socket.emit(RT.REACTION_ADD, { messageId, emoji })
+   895→          }
+   896→          return { ...m, reactions }
+   897→        })
+   898→      )
+   899→    },
+   900→    [socket, meId, me]
+   901→  )
+   902→
+   903→  // ---- reply (inserts a simple @reply prefix into the input) ----
+   904→  const handleReply = useCallback((msg: Message) => {
+   905→    setText((t) => (t.startsWith('@reply') ? t : `@reply ${t}`))
+   906→  }, [])
+   907→
+   908→  // ---- delete message (for me / for everyone) ----
+   909→  const confirmDelete = useCallback(
+   910→    async (msg: Message, scope: 'me' | 'everyone') => {
+   911→      setDeleteTarget(null)
+   912→      try {
+   913→        await api(`/api/messages/${msg.id}/delete`, {
+   914→          method: 'POST',
+   915→          body: JSON.stringify({ scope }),
+   916→        })
+   917→        if (scope === 'me') {
+   918→          // optimistic: remove from local view immediately
+   919→          setMessages((prev) => prev.filter((m) => m.id !== msg.id))
+   920→          toast.success('Message deleted for you')
+   921→        } else {
+   922→          // tell other participants via realtime + swap local for placeholder
+   923→          if (socket) {
+   924→            socket.emit(RT.MESSAGE_DELETE, { messageId: msg.id, scope: 'everyone' })
+   925→          }
+   926→          setMessages((prev) =>
+   927→            prev.map((m) =>
+   928→              m.id === msg.id
+   929→                ? {
+   930→                    ...m,
+   931→                    deletedFor: 'everyone',
+   932→                    content: '',
+   933→                    fileUrl: null,
+   934→                    fileName: null,
+   935→                    fileSize: null,
+   936→                    mimeType: null,
+   937→                    type: 'text',
+   938→                    reactions: [],
+   939→                  }
+   940→                : m
+   941→            )
+   942→          )
+   943→          toast.success('Message deleted for everyone')
+   944→        }
+   945→      } catch (e: any) {
+   946→        toast.error(e?.message || 'Failed to delete message')
+   947→      }
+   948→    },
+   949→    [socket]
+   950→  )
+   951→
+   952→  // ---- toggle star on a message (optimistic + API) ----
+   953→  const toggleStar = useCallback(async (msg: Message) => {
+   954→    const next = !msg.starred
+   955→    setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, starred: next } : m)))
+   956→    try {
+   957→      if (next) {
+   958→        await api(`/api/messages/${msg.id}/star`, { method: 'POST' })
+   959→        toast.success('Starred')
+   960→      } else {
+   961→        await api(`/api/messages/${msg.id}/star`, { method: 'DELETE' })
+   962→        toast.success('Unstarred')
+   963→      }
+   964→    } catch (e: any) {
+   965→      // revert on failure
+   966→      setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, starred: !next } : m)))
+   967→      toast.error(e?.message || 'Failed to update star')
+   968→    }
+   969→  }, [])
+   970→
+   971→  // ---- update disappearing messages preference ----
+   972→  const handleDisappearingChange = useCallback(
+   973→    async (value: 'OFF' | '24H' | '7D') => {
+   974→      const prev = disappearing
+   975→      setDisappearing(value)
+   976→      try {
+   977→        await api('/api/messages/preferences', {
+   978→          method: 'POST',
+   979→          body: JSON.stringify({ peerId, disappearing: value }),
+   980→        })
+   981→        toast.success(
+   982→          value === 'OFF'
+   983→            ? 'Disappearing messages off'
+   984→            : `Messages disappear after ${value === '24H' ? '24 hours' : '7 days'}`
+   985→        )
+   986→      } catch (e: any) {
+   987→        setDisappearing(prev)
+   988→        toast.error(e?.message || 'Failed to update')
+   989→      }
+   990→    },
+   991→    [peerId, disappearing]
+   992→  )
+   993→
+   994→  // ---- update wallpaper preference ----
+   995→  const handleWallpaperChange = useCallback(
+   996→    async (value: string) => {
+   997→      const prev = wallpaper
+   998→      setWallpaper(value || null)
+   999→      try {
+  1000→        await api('/api/messages/preferences', {
+  1001→          method: 'POST',
+  1002→          body: JSON.stringify({ peerId, wallpaper: value || null }),
+  1003→        })
+  1004→        toast.success(value ? 'Wallpaper updated' : 'Wallpaper cleared')
+  1005→      } catch (e: any) {
+  1006→        setWallpaper(prev)
+  1007→        toast.error(e?.message || 'Failed to update wallpaper')
+  1008→      }
+  1009→    },
+  1010→    [peerId, wallpaper]
+  1011→  )
+  1012→
+  1013→  // ---- scroll handling + infinite scroll up ----
+  1014→  const loadOlder = useCallback(async () => {
+  1015→    if (!oldestTsRef.current) return
+  1016→    setLoadingOlder(true)
+  1017→    const el = scrollRef.current
+  1018→    prevHeightRef.current = el?.scrollHeight || 0
+  1019→    try {
+  1020→      const endpoint = `/api/messages?${mode === 'direct' ? 'userId' : 'groupId'}=${encodeURIComponent(peerId)}&before=${encodeURIComponent(oldestTsRef.current)}`
+  1021→      const data = await api<{ messages: Message[] }>(endpoint)
+  1022→      if (data.messages.length === 0) {
+  1023→        setHasMore(false)
+  1024→      } else {
+  1025→        const normalized = data.messages.map(normalizeMessage)
+  1026→        skipAutoScrollRef.current = true
+  1027→        setMessages((prev) => [...normalized, ...prev])
+  1028→        oldestTsRef.current = normalized[0]?.createdAt || oldestTsRef.current
+  1029→        if (normalized.length < 50) setHasMore(false)
+  1030→        // restore scroll position after DOM update
+  1031→        requestAnimationFrame(() => {
+  1032→          if (el) {
+  1033→            const newHeight = el.scrollHeight
+  1034→            el.scrollTop = newHeight - prevHeightRef.current
+  1035→          }
+  1036→        })
+  1037→      }
+  1038→    } catch (e: any) {
+  1039→      toast.error(e?.message || 'Failed to load older messages')
+  1040→    } finally {
+  1041→      setLoadingOlder(false)
+  1042→    }
+  1043→  }, [mode, peerId])
+  1044→
+  1045→  const handleScroll = useCallback(() => {
+  1046→    const el = scrollRef.current
+  1047→    if (!el) return
+  1048→    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+  1049→    atBottomRef.current = distFromBottom < 80
+  1050→    if (el.scrollTop < 60 && hasMore && !loadingOlder && !loading && oldestTsRef.current) {
+  1051→      loadOlder()
+  1052→    }
+  1053→  }, [hasMore, loadingOlder, loading, loadOlder])
+  1054→
+  1055→  // ---- send text ----
+  1056→  const sendMessage = useCallback(
+  1057→    (partial: Pick<Message, 'content' | 'type' | 'fileUrl' | 'fileName' | 'fileSize' | 'mimeType'>) => {
+  1058→      if (!socket || !meId) return
+  1059→      const tempId = newTempId()
+  1060→      const optimistic: Message = {
+  1061→        id: tempId,
+  1062→        tempId,
+  1063→        senderId: meId,
+  1064→        senderName: me?.name || null,
+  1065→        senderPhoto: me?.profile?.photoUrl ?? null,
+  1066→        receiverId: mode === 'direct' ? peerId : null,
+  1067→        groupId: mode === 'group' ? peerId : null,
+  1068→        content: partial.content,
+  1069→        type: partial.type,
+  1070→        fileUrl: partial.fileUrl ?? null,
+  1071→        fileName: partial.fileName ?? null,
+  1072→        fileSize: partial.fileSize ?? null,
+  1073→        mimeType: partial.mimeType ?? null,
+  1074→        status: 'SENDING',
+  1075→        createdAt: new Date().toISOString(),
+  1076→      }
+  1077→      setMessages((prev) => [...prev, optimistic])
+  1078→      atBottomRef.current = true
+  1079→
+  1080→      const payload: any = {
+  1081→        tempId,
+  1082→        content: partial.content,
+  1083→        type: partial.type,
+  1084→        fileUrl: partial.fileUrl ?? undefined,
+  1085→        fileName: partial.fileName ?? undefined,
+  1086→        fileSize: partial.fileSize ?? undefined,
+  1087→        mimeType: partial.mimeType ?? undefined,
+  1088→        ...(mode === 'direct' ? { receiverId: peerId } : { groupId: peerId }),
+  1089→      }
+  1090→      const event = mode === 'direct' ? RT.MESSAGE_SEND : RT.GROUP_MESSAGE_SEND
+  1091→      socket.emit(event, payload, (ack: any) => {
+  1092→        if (ack?.ok && ack.message) {
+  1093→          const realMsg: Message = {
+  1094→            ...normalizeMessage(ack.message),
+  1095→            tempId,
+  1096→            senderName: ack.message.senderName ?? ack.message.sender?.name ?? me?.name ?? null,
+  1097→            senderPhoto: ack.message.senderPhoto ?? ack.message.sender?.profile?.photoUrl ?? me?.profile?.photoUrl ?? null,
+  1098→          }
+  1099→          setMessages((prev) => prev.map((m) => (m.tempId === tempId ? realMsg : m)))
+  1100→        } else {
+  1101→          // leave optimistic in place with SENT fallback so user can retry
+  1102→          setMessages((prev) =>
+  1103→            prev.map((m) => (m.tempId === tempId ? { ...m, status: 'SENT' } : m))
+  1104→          )
+  1105→          toast.error(ack?.error || 'Failed to send message')
+  1106→        }
+  1107→      })
+  1108→    },
+  1109→    [socket, meId, me, mode, peerId]
+  1110→  )
+  1111→
+  1112→  const sendText = useCallback(() => {
+  1113→    const content = text.trim()
+  1114→    if (!content) return
+  1115→    sendMessage({ content, type: 'text', fileUrl: null, fileName: null, fileSize: null, mimeType: null })
+  1116→    setText('')
+  1117→    if (socket && mode === 'direct') {
+  1118→      socket.emit(RT.TYPING, { receiverId: peerId, isTyping: false })
+  1119→      if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
+  1120→    }
+  1121→  }, [text, sendMessage, socket, mode, peerId])
+  1122→
+  1123→  // ---- send file ----
+  1124→  const sendFile = useCallback(
+  1125→    async (file: File) => {
+  1126→      setUploading(true)
+  1127→      try {
+  1128→        const { file: uploaded } = await uploadFile(file)
+  1129→        const type = fileTypeFromMime(uploaded.mimeType)
+  1130→        sendMessage({
+  1131→          content: '',
+  1132→          type,
+  1133→          fileUrl: uploaded.url,
+  1134→          fileName: uploaded.name,
+  1135→          fileSize: uploaded.size,
+  1136→          mimeType: uploaded.mimeType,
+  1137→        })
+  1138→      } catch (e: any) {
+  1139→        toast.error(e?.message || 'Upload failed')
+  1140→      } finally {
+  1141→        setUploading(false)
+  1142→        if (fileInputRef.current) fileInputRef.current.value = ''
+  1143→      }
+  1144→    },
+  1145→    [sendMessage]
+  1146→  )
+  1147→
+  1148→  // ---- voice note recording ----
+  1149→  const startRecording = useCallback(async () => {
+  1150→    try {
+  1151→      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+  1152→      recordStreamRef.current = stream
+  1153→      recordedChunksRef.current = []
+  1154→      const mr = new MediaRecorder(stream)
+  1155→      mr.ondataavailable = (e) => {
+  1156→        if (e.data.size > 0) recordedChunksRef.current.push(e.data)
+  1157→      }
+  1158→      mr.onstop = async () => {
+  1159→        const blob = new Blob(recordedChunksRef.current, { type: mr.mimeType || 'audio/webm' })
+  1160→        const ext = (mr.mimeType || 'audio/webm').includes('mp4') ? 'm4a' : 'webm'
+  1161→        const file = new File([blob], `voice-${Date.now()}.${ext}`, { type: blob.type })
+  1162→        await sendFile(file)
+  1163→      }
+  1164→      mr.start()
+  1165→      mediaRecorderRef.current = mr
+  1166→      setRecording(true)
+  1167→      setRecordSecs(0)
+  1168→      recordTimerRef.current = setInterval(() => setRecordSecs((s) => s + 1), 1000)
+  1169→    } catch (e: any) {
+  1170→      toast.error(e?.message || 'Microphone access denied')
+  1171→    }
+  1172→  }, [sendFile])
+  1173→
+  1174→  const stopRecording = useCallback((cancel: boolean = false) => {
+  1175→    const mr = mediaRecorderRef.current
+  1176→    if (mr && mr.state !== 'inactive') {
+  1177→      if (cancel) {
+  1178→        mr.onstop = null
+  1179→        mr.stop()
+  1180→      } else {
+  1181→        mr.stop()
+  1182→      }
+  1183→    }
+  1184→    if (recordStreamRef.current) {
+  1185→      recordStreamRef.current.getTracks().forEach((t) => t.stop())
+  1186→      recordStreamRef.current = null
+  1187→    }
+  1188→    if (recordTimerRef.current) {
+  1189→      clearInterval(recordTimerRef.current)
+  1190→      recordTimerRef.current = null
+  1191→    }
+  1192→    setRecording(false)
+  1193→    setRecordSecs(0)
+  1194→  }, [])
+  1195→
+  1196→  // cleanup on unmount
+  1197→  useEffect(() => {
+  1198→    return () => {
+  1199→      if (recordStreamRef.current) recordStreamRef.current.getTracks().forEach((t) => t.stop())
+  1200→      if (recordTimerRef.current) clearInterval(recordTimerRef.current)
+  1201→    }
+  1202→  }, [])
+  1203→
+  1204→  // ---- search reload ----
+  1205→  const runSearch = useCallback(
+  1206→    async (q: string) => {
+  1207→      setSearchQuery(q)
+  1208→      if (!q.trim()) {
+  1209→        // reload normal history
+  1210→        try {
+  1211→          const endpoint = `/api/messages?${mode === 'direct' ? 'userId' : 'groupId'}=${encodeURIComponent(peerId)}`
+  1212→          const data = await api<{ messages: Message[] }>(endpoint)
+  1213→          setMessages(data.messages.map(normalizeMessage))
+  1214→          if (data.messages.length > 0) oldestTsRef.current = data.messages[0].createdAt
+  1215→          setHasMore(data.messages.length >= 50)
+  1216→        } catch {}
+  1217→        return
+  1218→      }
+  1219→      try {
+  1220→        const endpoint = `/api/messages?${mode === 'direct' ? 'userId' : 'groupId'}=${encodeURIComponent(peerId)}&q=${encodeURIComponent(q)}`
+  1221→        const data = await api<{ messages: Message[] }>(endpoint)
+  1222→        setMessages(data.messages.map(normalizeMessage))
+  1223→        setHasMore(false)
+  1224→      } catch {}
+  1225→    },
+  1226→    [mode, peerId]
+  1227→  )
+  1228→
+  1229→  // ---- typing ----
+  1230→  const handleTextInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  1231→    setText(e.target.value)
+  1232→    if (socket && mode === 'direct') {
+  1233→      socket.emit(RT.TYPING, { receiverId: peerId, isTyping: true })
+  1234→      if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
+  1235→      typingTimerRef.current = setTimeout(() => {
+  1236→        socket.emit(RT.TYPING, { receiverId: peerId, isTyping: false })
+  1237→      }, 1500)
+  1238→    }
+  1239→  }
+  1240→
+  1241→  const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  1242→    if (e.key === 'Enter' && !e.shiftKey) {
+  1243→      e.preventDefault()
+  1244→      sendText()
+  1245→    }
+  1246→  }
+  1247→
+  1248→  const startCall = (type: 'audio' | 'video') => {
+  1249→    window.dispatchEvent(
+  1250→      new CustomEvent('fc:start-call', { detail: { targetUserId: peerId, type } })
+  1251→    )
+  1252→  }
+  1253→
+  1254→  const online = mode === 'direct' ? isOnline(peerId) : false
+  1255→  const headerStatus = mode === 'direct'
+  1256→    ? peerTyping
+  1257→      ? 'typing…'
+  1258→      : lastSeenText(online, peerInfo?.lastSeen)
+  1259→    : `${peerInfo?.memberCount ?? 0} members`
+  1260→
+  1261→  return (
+  1262→    <div className="flex h-full flex-col bg-background">
+  1263→      {/* header */}
+  1264→      <header className="flex items-center gap-2 border-b border-border bg-background/95 px-2 py-2 backdrop-blur">
+  1265→        <button
+  1266→          onClick={onBack}
+  1267→          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-foreground transition hover:bg-accent"
+  1268→          aria-label="Back to conversations"
+  1269→        >
+  1270→          <ArrowLeft size={20} />
+  1271→        </button>
+  1272→        <div className="flex min-w-0 flex-1 items-center gap-2">
+  1273→          {mode === 'direct' ? (
+  1274→            <UserAvatar name={peerInfo?.name || 'User'} src={peerInfo?.photoUrl} size={38} online={online} />
+  1275→          ) : peerInfo?.photoUrl ? (
+  1276→            <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full ring-1 ring-border">
+  1277→              <img src={peerInfo.photoUrl} alt={peerInfo.name} className="h-full w-full object-cover" />
+  1278→            </div>
+  1279→          ) : (
+  1280→            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/15 text-primary ring-1 ring-border">
+  1281→              <Users size={18} />
+  1282→            </div>
+  1283→          )}
+  1284→          <div className="min-w-0">
+  1285→            <div className="truncate text-sm font-semibold leading-tight">
+  1286→              {peerInfo?.name || (loading ? 'Loading…' : 'Unknown')}
+  1287→            </div>
+  1288→            <div
+  1289→              className={cn(
+  1290→                'flex items-center gap-1 truncate text-xs leading-tight',
+  1291→                peerTyping ? 'text-primary' : 'text-muted-foreground'
+  1292→              )}
+  1293→            >
+  1294→              {disappearing !== 'OFF' && (
+  1295→                <span
+  1296→                  className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary"
+  1297→                  title={`Disappearing in ${disappearing === '24H' ? '24h' : '7d'}`}
+  1298→                >
+  1299→                  <Timer size={9} />
+  1300→                  {disappearing === '24H' ? '24h' : '7d'}
+  1301→                </span>
+  1302→              )}
+  1303→              <span className="truncate">{headerStatus}</span>
+  1304→            </div>
+  1305→          </div>
+  1306→        </div>
+  1307→        <div className="flex shrink-0 items-center gap-1">
+  1308→          {mode === 'direct' && (
+  1309→            <>
+  1310→              <button
+  1311→                onClick={() => setSearchOpen((s) => !s)}
+  1312→                className={cn('grid h-9 w-9 place-items-center rounded-full transition hover:bg-accent', searchOpen ? 'text-primary' : 'text-muted-foreground hover:text-primary')}
+  1313→                aria-label="Search messages"
+  1314→              >
+  1315→                <Search size={18} />
+  1316→              </button>
+  1317→              <button
+  1318→                onClick={() => startCall('audio')}
+  1319→                className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-primary"
+  1320→                aria-label="Start audio call"
+  1321→              >
+  1322→                <Phone size={18} />
+  1323→              </button>
+  1324→              <button
+  1325→                onClick={() => startCall('video')}
+  1326→                className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-primary"
+  1327→                aria-label="Start video call"
+  1328→              >
+  1329→                <Video size={18} />
+  1330→              </button>
+  1331→            </>
+  1332→          )}
+  1333→          <button
+  1334→            onClick={() => setSettingsOpen(true)}
+  1335→            className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-primary"
+  1336→            aria-label="Chat settings"
+  1337→          >
+  1338→            <MoreVertical size={18} />
+  1339→          </button>
+  1340→        </div>
+  1341→      </header>
+  1342→
+  1343→      {/* search bar */}
+  1344→      {searchOpen && (
+  1345→        <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2">
+  1346→          <Search size={15} className="text-muted-foreground" />
+  1347→          <input
+  1348→            autoFocus
+  1349→            value={searchQuery}
+  1350→            onChange={(e) => runSearch(e.target.value)}
+  1351→            placeholder="Search messages in this chat…"
+  1352→            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+  1353→          />
+  1354→          {searchQuery && (
+  1355→            <button
+  1356→              onClick={() => { setSearchQuery(''); setSearchOpen(false); runSearch('') }}
+  1357→              className="grid h-6 w-6 place-items-center rounded-full text-muted-foreground hover:bg-accent"
+  1358→              aria-label="Close search"
+  1359→            >
+  1360→              <X size={14} />
+  1361→            </button>
+  1362→          )}
+  1363→        </div>
+  1364→      )}
+  1365→
+  1366→      {/* messages */}
+  1367→      <div
+  1368→        ref={scrollRef}
+  1369→        onScroll={handleScroll}
+  1370→        style={wallpaper ? { background: wallpaper } : undefined}
+  1371→        className="fc-scroll flex-1 overflow-y-auto px-3 py-3"
+  1372→      >
+  1373→        {loading ? (
+  1374→          <div className="flex h-full items-center justify-center">
+  1375→            <Loader2 className="animate-spin text-muted-foreground" size={24} />
+  1376→          </div>
+  1377→        ) : messages.length === 0 ? (
+  1378→          <div className="flex h-full items-center justify-center">
+  1379→            <EmptyState
+  1380→              icon={<MessageCircle size={36} />}
+  1381→              title="No messages yet"
+  1382→              description={
+  1383→                mode === 'direct'
+  1384→                  ? 'Say hello to start the conversation.'
+  1385→                  : 'Be the first to post in this group.'
+  1386→              }
+  1387→            />
+  1388→          </div>
+  1389→        ) : (
+  1390→          <>
+  1391→            {loadingOlder && (
+  1392→              <div className="mb-2 flex justify-center">
+  1393→                <Loader2 className="animate-spin text-muted-foreground" size={16} />
+  1394→              </div>
+  1395→            )}
+  1396→            {!hasMore && !loadingOlder && (
+  1397→              <div className="mb-3 mt-1 text-center">
+  1398→                <span className="rounded-full bg-accent/60 px-3 py-1 text-[10px] text-muted-foreground">
+  1399→                  Start of conversation
+  1400→                </span>
+  1401→              </div>
+  1402→            )}
+  1403→            <div className="flex flex-col gap-1">
+  1404→              {messages.map((m, idx) => {
+  1405→                const mine = m.senderId === meId
+  1406→                const prev = messages[idx - 1]
+  1407→                const showSender =
+  1408→                  mode === 'group' && !mine && (idx === 0 || prev?.senderId !== m.senderId)
+  1409→                return (
+  1410→                  <MessageBubble
+  1411→                    key={m.id}
+  1412→                    msg={m}
+  1413→                    mine={mine}
+  1414→                    isGroup={mode === 'group'}
+  1415→                    showSender={showSender}
+  1416→                    meId={meId}
+  1417→                    searchQuery={searchQuery}
+  1418→                    onImageClick={(url) => setImagePreview(url)}
+  1419→                    onReact={toggleReaction}
+  1420→                    onReply={handleReply}
+  1421→                    onForward={(msg) => setForwardTarget(msg)}
+  1422→                    onDelete={(msg) => setDeleteTarget(msg)}
+  1423→                    onStar={toggleStar}
+  1424→                  />
+  1425→                )
+  1426→              })}
+  1427→              {peerTyping && (
+  1428→                <div className="flex items-center gap-2 pl-1">
+  1429→                  {mode === 'group' && <div className="w-7 shrink-0" />}
+  1430→                  <div className="fc-bubble-them fc-rise flex items-center gap-1 px-3 py-3">
+  1431→                    <span
+  1432→                      className="fc-typing-dot h-1.5 w-1.5 rounded-full bg-current"
+  1433→                      style={{ animationDelay: '0ms' }}
+  1434→                    />
+  1435→                    <span
+  1436→                      className="fc-typing-dot h-1.5 w-1.5 rounded-full bg-current"
+  1437→                      style={{ animationDelay: '150ms' }}
+  1438→                    />
+  1439→                    <span
+  1440→                      className="fc-typing-dot h-1.5 w-1.5 rounded-full bg-current"
+  1441→                      style={{ animationDelay: '300ms' }}
+  1442→                    />
+  1443→                  </div>
+  1444→                </div>
+  1445→              )}
+  1446→            </div>
+  1447→            <div ref={bottomRef} />
+  1448→          </>
+  1449→        )}
+  1450→      </div>
+  1451→
+  1452→      {/* input bar */}
+  1453→      <div className="border-t border-border bg-background p-2 fc-safe-bottom">
+  1454→        {recording ? (
+  1455→          <div className="flex items-center gap-3 rounded-2xl bg-destructive/10 px-4 py-3">
+  1456→            <span className="relative flex h-3 w-3">
+  1457→              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive opacity-75" />
+  1458→              <span className="relative inline-flex h-3 w-3 rounded-full bg-destructive" />
+  1459→            </span>
+  1460→            <span className="font-mono text-sm font-medium text-destructive">
+  1461→              {String(Math.floor(recordSecs / 60)).padStart(2, '0')}:{String(recordSecs % 60).padStart(2, '0')}
+  1462→            </span>
+  1463→            <span className="flex-1 text-sm text-muted-foreground">Recording voice note…</span>
+  1464→            <button
+  1465→              onClick={() => stopRecording(true)}
+  1466→              className="grid h-9 w-9 place-items-center rounded-full text-destructive transition hover:bg-destructive/10"
+  1467→              aria-label="Cancel recording"
+  1468→            >
+  1469→              <Trash2 size={18} />
+  1470→            </button>
+  1471→            <button
+  1472→              onClick={() => stopRecording(false)}
+  1473→              className="grid h-9 w-9 place-items-center rounded-full bg-primary text-primary-foreground transition hover:bg-primary/90"
+  1474→              aria-label="Send voice note"
+  1475→            >
+  1476→              <Send size={18} />
+  1477→            </button>
+  1478→          </div>
+  1479→        ) : (
+  1480→          <div className="flex items-end gap-1.5">
+  1481→            <EmojiPicker onPick={(emoji) => setText((t) => t + emoji)} />
+  1482→            <input
+  1483→              ref={fileInputRef}
+  1484→              type="file"
+  1485→              className="hidden"
+  1486→              accept="image/*,video/*,audio/*,.pdf,.zip,.doc,.docx,.txt"
+  1487→              onChange={(e) => {
+  1488→                const f = e.target.files?.[0]
+  1489→                if (f) sendFile(f)
+  1490→              }}
+  1491→            />
+  1492→            <button
+  1493→              onClick={() => fileInputRef.current?.click()}
+  1494→              disabled={uploading}
+  1495→              className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-primary disabled:opacity-50"
+  1496→              aria-label="Attach file"
+  1497→            >
+  1498→              {uploading ? <Loader2 className="animate-spin" size={20} /> : <Paperclip size={20} />}
+  1499→            </button>
+  1500→            <Textarea
+  1501→              value={text}
+  1502→              onChange={handleTextInput}
+  1503→              onKeyDown={handleKey}
+  1504→              placeholder="Type a message…"
+  1505→              rows={1}
+  1506→              className="min-h-10 max-h-32 flex-1 resize-none rounded-2xl bg-accent/40 px-3 py-2.5 text-sm"
+  1507→            />
+  1508→            {text.trim() ? (
+  1509→              <button
+  1510→                onClick={sendText}
+  1511→                disabled={uploading}
+  1512→                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm transition hover:bg-primary/90 disabled:opacity-50"
+  1513→                aria-label="Send message"
+  1514→              >
+  1515→                <Send size={18} />
+  1516→              </button>
+  1517→            ) : (
+  1518→              <button
+  1519→                onClick={startRecording}
+  1520→                disabled={uploading}
+  1521→                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/15 text-primary transition hover:bg-primary/25 disabled:opacity-50"
+  1522→                aria-label="Record voice note"
+  1523→              >
+  1524→                <Mic size={20} />
+  1525→              </button>
+  1526→            )}
+  1527→          </div>
+  1528→        )}
+  1529→      </div>
+  1530→
+  1531→      {/* image preview dialog */}
+  1532→      <Dialog open={!!imagePreview} onOpenChange={(o) => !o && setImagePreview(null)}>
+  1533→        <DialogContent
+  1534→          className="max-w-3xl border-0 bg-black/95 p-2 sm:max-w-3xl"
+  1535→          showCloseButton
+  1536→        >
+  1537→          <DialogTitle className="sr-only">Image preview</DialogTitle>
+  1538→          {imagePreview && (
+  1539→            <img
+  1540→              src={imagePreview}
+  1541→              alt="Image preview"
+  1542→              className="mx-auto max-h-[85vh] w-auto rounded-lg object-contain"
+  1543→            />
+  1544→          )}
+  1545→        </DialogContent>
+  1546→      </Dialog>
+  1547→
+  1548→      {/* forward dialog */}
+  1549→      <ForwardDialog
+  1550→        message={forwardTarget}
+  1551→        onClose={() => setForwardTarget(null)}
+  1552→      />
+  1553→
+  1554→      {/* delete confirm dialog */}
+  1555→      <DeleteConfirmDialog
+  1556→        message={deleteTarget}
+  1557→        meId={meId}
+  1558→        onClose={() => setDeleteTarget(null)}
+  1559→        onConfirm={confirmDelete}
+  1560→      />
+  1561→
+  1562→      {/* chat settings sheet (disappearing + wallpaper + starred) */}
+  1563→      <ChatSettingsSheet
+  1564→        open={settingsOpen}
+  1565→        onOpenChange={setSettingsOpen}
+  1566→        disappearing={disappearing}
+  1567→        wallpaper={wallpaper}
+  1568→        onDisappearingChange={handleDisappearingChange}
+  1569→        onWallpaperChange={handleWallpaperChange}
+  1570→        onOpenStarred={() => setStarredDialogOpen(true)}
+  1571→      />
+  1572→
+  1573→      {/* starred messages viewer */}
+  1574→      <StarredMessagesDialog
+  1575→        open={starredDialogOpen}
+  1576→        onOpenChange={setStarredDialogOpen}
+  1577→      />
+  1578→    </div>
+  1579→  )
+  1580→}
+  1581→
+  1582→// ---------------- emoji picker ----------------
+  1583→function EmojiPicker({ onPick }: { onPick: (e: string) => void }) {
+  1584→  const [open, setOpen] = useState(false)
+  1585→  return (
+  1586→    <Popover open={open} onOpenChange={setOpen}>
+  1587→      <PopoverTrigger asChild>
+  1588→        <button
+  1589→          type="button"
+  1590→          className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-primary"
+  1591→          aria-label="Pick an emoji"
+  1592→        >
+  1593→          <Smile size={20} />
+  1594→        </button>
+  1595→      </PopoverTrigger>
+  1596→      <PopoverContent align="start" side="top" className="w-72 p-3">
+  1597→        <div className="grid grid-cols-8 gap-0.5">
+  1598→          {EMOJIS.map((e, i) => (
+  1599→            <button
+  1600→              key={`${e}-${i}`}
+  1601→              type="button"
+  1602→              onClick={() => {
+  1603→                onPick(e)
+  1604→                setOpen(false)
+  1605→              }}
+  1606→              className="grid h-8 w-8 place-items-center rounded-md text-lg transition hover:bg-accent"
+  1607→            >
+  1608→              {e}
+  1609→            </button>
+  1610→          ))}
+  1611→        </div>
+  1612→      </PopoverContent>
+  1613→    </Popover>
+  1614→  )
+  1615→}
+  1616→
+  1617→// ---------------- message bubble ----------------
+  1618→const QUICK_REACTIONS = ['❤️', '😂', '👍', '😮', '😢', '🙏']
+  1619→
+  1620→function highlight(text: string, q: string): React.ReactNode[] {
+  1621→  if (!q.trim()) return linkify(text)
+  1622→  const lower = text.toLowerCase()
+  1623→  const ql = q.toLowerCase()
+  1624→  const nodes: React.ReactNode[] = []
+  1625→  let i = 0
+  1626→  let idx = lower.indexOf(ql, i)
+  1627→  let key = 0
+  1628→  while (idx !== -1) {
+  1629→    if (idx > i) nodes.push(<span key={key++}>{text.slice(i, idx)}</span>)
+  1630→    nodes.push(
+  1631→      <mark key={key++} className="rounded bg-yellow-300 px-0.5 text-black">
+  1632→        {text.slice(idx, idx + ql.length)}
+  1633→      </mark>
+  1634→    )
+  1635→    i = idx + ql.length
+  1636→    idx = lower.indexOf(ql, i)
+  1637→  }
+  1638→  if (i < text.length) nodes.push(<span key={key++}>{text.slice(i)}</span>)
+  1639→  return nodes
+  1640→}
+  1641→
+  1642→function MessageBubble({
+  1643→  msg,
+  1644→  mine,
+  1645→  isGroup,
+  1646→  showSender,
+  1647→  meId,
+  1648→  searchQuery,
+  1649→  onImageClick,
+  1650→  onReact,
+  1651→  onReply,
+  1652→  onForward,
+  1653→  onDelete,
+  1654→  onStar,
+  1655→}: {
+  1656→  msg: Message
+  1657→  mine: boolean
+  1658→  isGroup: boolean
+  1659→  showSender: boolean
+  1660→  meId?: string
+  1661→  searchQuery?: string
+  1662→  onImageClick: (url: string) => void
+  1663→  onReact: (messageId: string, emoji: string) => void
+  1664→  onReply: (msg: Message) => void
+  1665→  onForward: (msg: Message) => void
+  1666→  onDelete: (msg: Message) => void
+  1667→  onStar: (msg: Message) => void
+  1668→}) {
+  1669→  const bubbleClass = mine ? 'fc-bubble-me' : 'fc-bubble-them'
+  1670→  const isMedia = msg.type === 'image' || msg.type === 'video'
+  1671→  const [menuOpen, setMenuOpen] = useState(false)
+  1672→  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  1673→
+  1674→  const deleted = isDeletedForMe(msg, meId)
+  1675→  const forwarded = !!msg.forwardedFrom
+  1676→
+  1677→  const startPress = () => {
+  1678→    if (deleted) return
+  1679→    pressTimer.current = setTimeout(() => setMenuOpen(true), 450)
+  1680→  }
+  1681→  const cancelPress = () => {
+  1682→    if (pressTimer.current) clearTimeout(pressTimer.current)
+  1683→  }
+  1684→
+  1685→  const copyContent = (text: string) => {
+  1686→    if (!text) return
+  1687→    navigator.clipboard
+  1688→      .writeText(text)
+  1689→      .then(() => toast.success('Copied to clipboard'))
+  1690→      .catch(() => toast.error('Failed to copy'))
+  1691→  }
+  1692→
+  1693→  // aggregate reactions: emoji -> { count, mine }
+  1694→  const reactionAgg = React.useMemo(() => {
+  1695→    const map = new Map<string, { count: number; mine: boolean }>()
+  1696→    for (const r of msg.reactions || []) {
+  1697→      const cur = map.get(r.emoji) || { count: 0, mine: false }
+  1698→      cur.count += 1
+  1699→      if (r.userId === meId) cur.mine = true
+  1700→      map.set(r.emoji, cur)
+  1701→    }
+  1702→    return Array.from(map.entries())
+  1703→  }, [msg.reactions, meId])
+  1704→
+  1705→  const meta = (
+  1706→    <div
+  1707→      className={cn(
+  1708→        'mt-0.5 flex items-center justify-end gap-1 text-[10px] leading-none',
+  1709→        mine ? 'opacity-80' : 'opacity-70'
+  1710→      )}
+  1711→    >
+  1712→      <span>{clockTime(msg.createdAt)}</span>
+  1713→      {mine && <StatusTick status={msg.status} />}
+  1714→    </div>
+  1715→  )
+  1716→
+  1717→  // ---- deleted placeholder (WhatsApp-style) ----
+  1718→  if (deleted) {
+  1719→    return (
+  1720→      <div className={cn('flex w-full gap-2', mine ? 'justify-end' : 'justify-start')}>
+  1721→        {!mine && isGroup && (
+  1722→          <div className="mt-1 self-start">
+  1723→            <UserAvatar name={msg.senderName || 'User'} src={msg.senderPhoto || undefined} size={28} />
+  1724→          </div>
+  1725→        )}
+  1726→        <div className={cn('fc-rise flex max-w-[78%] flex-col', mine ? 'items-end' : 'items-start')}>
+  1727→          {!mine && isGroup && showSender && (
+  1728→            <span className="mb-0.5 px-1 text-xs font-semibold text-primary">
+  1729→              {msg.senderName || 'Unknown'}
+  1730→            </span>
+  1731→          )}
+  1732→          <div
+  1733→            className={cn(
+  1734→              'rounded-2xl bg-muted px-2.5 py-1.5 text-sm italic text-muted-foreground shadow-sm',
+  1735→              mine ? 'rounded-br-sm' : 'rounded-bl-sm'
+  1736→            )}
+  1737→          >
+  1738→            <p className="whitespace-pre-wrap break-words">🚫 This message was deleted</p>
+  1739→            <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] leading-none opacity-70">
+  1740→              <span>{clockTime(msg.createdAt)}</span>
+  1741→            </div>
+  1742→          </div>
+  1743→        </div>
+  1744→      </div>
+  1745→    )
+  1746→  }
+  1747→
+  1748→  return (
+  1749→    <div className={cn('flex w-full gap-2', mine ? 'justify-end' : 'justify-start')}>
+  1750→      {!mine && isGroup && (
+  1751→        <div className="mt-1 self-start">
+  1752→          <UserAvatar name={msg.senderName || 'User'} src={msg.senderPhoto || undefined} size={28} />
+  1753→        </div>
+  1754→      )}
+  1755→      <div className={cn('fc-rise flex max-w-[78%] flex-col', mine ? 'items-end' : 'items-start')}>
+  1756→        {!mine && isGroup && showSender && (
+  1757→          <span className="mb-0.5 px-1 text-xs font-semibold text-primary">
+  1758→            {msg.senderName || 'Unknown'}
+  1759→          </span>
+  1760→        )}
+  1761→        {forwarded && (
+  1762→          <div className="mb-0.5 flex items-center gap-0.5 px-1 text-[10px] italic text-muted-foreground">
+  1763→            <Forward size={10} /> Forwarded
+  1764→          </div>
+  1765→        )}
+  1766→        <div
+  1767→          onPointerDown={startPress}
+  1768→          onPointerUp={cancelPress}
+  1769→          onPointerLeave={cancelPress}
+  1770→          onDoubleClick={() => onReact(msg.id, '❤️')}
+  1771→          className={cn('relative text-sm shadow-sm', bubbleClass, isMedia ? 'p-1' : 'px-2.5 py-1.5')}
+  1772→        >
+  1773→          {msg.starred && (
+  1774→            <span
+  1775→              className="absolute -top-1.5 -right-1.5 z-10 grid h-4 w-4 place-items-center rounded-full bg-card shadow-sm ring-1 ring-border"
+  1776→              aria-label="Starred message"
+  1777→            >
+  1778→              <Star size={11} className="fill-primary text-primary" />
+  1779→            </span>
+  1780→          )}
+  1781→          {msg.type === 'text' && (
+  1782→            <>
+  1783→              <p className="whitespace-pre-wrap break-words">{highlight(msg.content, searchQuery || '')}</p>
+  1784→              {meta}
+  1785→            </>
+  1786→          )}
+  1787→          {msg.type === 'image' && msg.fileUrl && (
+  1788→            <>
+  1789→              <button type="button" onClick={() => onImageClick(msg.fileUrl!)} className="block">
+  1790→                <img
+  1791→                  src={msg.fileUrl}
+  1792→                  alt={msg.fileName || 'image'}
+  1793→                  className="max-h-72 max-w-[260px] rounded-lg object-cover"
+  1794→                />
+  1795→              </button>
+  1796→              <div className="px-1 pb-0.5 pt-1">{meta}</div>
+  1797→            </>
+  1798→          )}
+  1799→          {msg.type === 'video' && msg.fileUrl && (
+  1800→            <>
+  1801→              <video
+  1802→                src={msg.fileUrl}
+  1803→                controls
+  1804→                className="max-h-72 max-w-[260px] rounded-lg bg-black"
+  1805→              />
+  1806→              <div className="px-1 pb-0.5 pt-1">{meta}</div>
+  1807→            </>
+  1808→          )}
+  1809→          {msg.type === 'audio' && msg.fileUrl && (
+  1810→            <>
+  1811→              <div className="flex items-center gap-2 py-0.5">
+  1812→                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/20 text-primary">
+  1813→                  <Mic size={16} />
+  1814→                </span>
+  1815→                <audio src={msg.fileUrl} controls className="w-48 max-w-full" />
+  1816→              </div>
+  1817→              {meta}
+  1818→            </>
+  1819→          )}
+  1820→          {msg.type === 'document' && msg.fileUrl && (
+  1821→            <>
+  1822→              <a
+  1823→                href={msg.fileUrl}
+  1824→                target="_blank"
+  1825→                rel="noreferrer"
+  1826→                download={msg.fileName || undefined}
+  1827→                className="flex items-center gap-2.5 rounded-lg bg-black/5 px-2.5 py-2 transition hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15"
+  1828→              >
+  1829→                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary/15 text-primary">
+  1830→                  <FileText size={18} />
+  1831→                </div>
+  1832→                <div className="min-w-0 flex-1">
+  1833→                  <div className="truncate text-xs font-medium">{msg.fileName || 'Document'}</div>
+  1834→                  <div className="text-[10px] opacity-70">{formatBytes(msg.fileSize)}</div>
+  1835→                </div>
+  1836→                <Download size={16} className="shrink-0 opacity-70" />
+  1837→              </a>
+  1838→              {meta}
+  1839→            </>
+  1840→          )}
+  1841→
+  1842→          {/* action menu: quick reactions row + Reply/Forward/Copy/Delete */}
+  1843→          {menuOpen && (
+  1844→            <>
+  1845→              <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
+  1846→              <div
+  1847→                className={cn(
+  1848→                  'absolute bottom-full z-30 mb-1 w-52 overflow-hidden rounded-xl border border-border bg-popover p-1 shadow-xl fc-rise',
+  1849→                  mine ? 'right-0' : 'left-0'
+  1850→                )}
+  1851→              >
+  1852→                <div className="mb-1 grid grid-cols-6 gap-0.5 border-b border-border px-0.5 pb-1">
+  1853→                  {QUICK_REACTIONS.map((e) => (
+  1854→                    <button
+  1855→                      key={e}
+  1856→                      onClick={() => { onReact(msg.id, e); setMenuOpen(false) }}
+  1857→                      className="grid h-8 w-8 place-items-center rounded-full text-lg transition hover:scale-125 hover:bg-accent"
+  1858→                    >
+  1859→                      {e}
+  1860→                    </button>
+  1861→                  ))}
+  1862→                </div>
+  1863→                <button
+  1864→                  onClick={() => { onReply(msg); setMenuOpen(false) }}
+  1865→                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition hover:bg-accent"
+  1866→                >
+  1867→                  <Reply size={14} className="text-muted-foreground" /> Reply
+  1868→                </button>
+  1869→                <button
+  1870→                  onClick={() => { onForward(msg); setMenuOpen(false) }}
+  1871→                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition hover:bg-accent"
+  1872→                >
+  1873→                  <Forward size={14} className="text-muted-foreground" /> Forward
+  1874→                </button>
+  1875→                <button
+  1876→                  onClick={() => { onStar(msg); setMenuOpen(false) }}
+  1877→                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition hover:bg-accent"
+  1878→                >
+  1879→                  <Star
+  1880→                    size={14}
+  1881→                    className={cn('text-muted-foreground', msg.starred && 'fill-primary text-primary')}
+  1882→                  />{' '}
+  1883→                  {msg.starred ? 'Unstar' : 'Star'}
+  1884→                </button>
+  1885→                {msg.content && (
+  1886→                  <button
+  1887→                    onClick={() => { copyContent(msg.content); setMenuOpen(false) }}
+  1888→                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition hover:bg-accent"
+  1889→                  >
+  1890→                    <Copy size={14} className="text-muted-foreground" /> Copy
+  1891→                  </button>
+  1892→                )}
+  1893→                <button
+  1894→                  onClick={() => { onDelete(msg); setMenuOpen(false) }}
+  1895→                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm text-destructive transition hover:bg-destructive/10"
+  1896→                >
+  1897→                  <Trash2 size={14} /> Delete
+  1898→                </button>
+  1899→              </div>
+  1900→            </>
+  1901→          )}
+  1902→        </div>
+  1903→
+  1904→        {/* reaction chips */}
+  1905→        {reactionAgg.length > 0 && (
+  1906→          <div className={cn('mt-0.5 flex flex-wrap gap-1', mine ? 'justify-end' : 'justify-start')}>
+  1907→            {reactionAgg.map(([emoji, info]) => (
+  1908→              <button
+  1909→                key={emoji}
+  1910→                onClick={() => onReact(msg.id, emoji)}
+  1911→                className={cn(
+  1912→                  'flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs transition',
+  1913→                  info.mine
+  1914→                    ? 'border-primary bg-primary/15 text-primary'
+  1915→                    : 'border-border bg-card text-foreground hover:bg-accent'
+  1916→                )}
+  1917→              >
+  1918→                <span className="text-sm">{emoji}</span>
+  1919→                {info.count > 1 && <span className="text-[10px] font-semibold">{info.count}</span>}
+  1920→              </button>
+  1921→            ))}
+  1922→          </div>
+  1923→        )}
+  1924→      </div>
+  1925→    </div>
+  1926→  )
+  1927→}
+  1928→
+  1929→// ---------------- status tick ----------------
+  1930→function StatusTick({ status }: { status?: MessageStatus }) {
+  1931→  if (!status || status === 'SENDING') {
+  1932→    return <Clock size={12} className="opacity-60" />
+  1933→  }
+  1934→  if (status === 'SENT') {
+  1935→    return <Check size={12} className="opacity-60" />
+  1936→  }
+  1937→  if (status === 'DELIVERED') {
+  1938→    return <CheckCheck size={12} className="opacity-60" />
+  1939→  }
+  1940→  if (status === 'SEEN') {
+  1941→    return <CheckCheck size={12} className="opacity-100" />
+  1942→  }
+  1943→  return null
+  1944→}
+  1945→
+  1946→// ---------------- forward dialog ----------------
+  1947→function ForwardDialog({
+  1948→  message,
+  1949→  onClose,
+  1950→}: {
+  1951→  message: Message | null
+  1952→  onClose: () => void
+  1953→}) {
+  1954→  const [friends, setFriends] = useState<Friend[]>([])
+  1955→  const [groups, setGroups] = useState<GroupLite[]>([])
+  1956→  const [selected, setSelected] = useState<Set<string>>(new Set())
+  1957→  const [loading, setLoading] = useState(false)
+  1958→  const [sending, setSending] = useState(false)
+  1959→
+  1960→  useEffect(() => {
+  1961→    if (!message) {
+  1962→      setSelected(new Set())
+  1963→      setFriends([])
+  1964→      setGroups([])
+  1965→      return
+  1966→    }
+  1967→    setLoading(true)
+  1968→    Promise.all([
+  1969→      api<{ friends: Friend[] }>('/api/friends').catch(() => ({ friends: [] as Friend[] })),
+  1970→      api<{ groups: GroupLite[] }>('/api/groups').catch(() => ({ groups: [] as GroupLite[] })),
+  1971→    ])
+  1972→      .then(([f, g]) => {
+  1973→        setFriends(f.friends)
+  1974→        setGroups(g.groups)
+  1975→      })
+  1976→      .finally(() => setLoading(false))
+  1977→  }, [message])
+  1978→
+  1979→  const toggle = (key: string) => {
+  1980→    setSelected((prev) => {
+  1981→      const next = new Set(prev)
+  1982→      if (next.has(key)) next.delete(key)
+  1983→      else next.add(key)
+  1984→      return next
+  1985→    })
+  1986→  }
+  1987→
+  1988→  const count = selected.size
+  1989→
+  1990→  const handleForward = async () => {
+  1991→    if (!message || count === 0) return
+  1992→    setSending(true)
+  1993→    try {
+  1994→      const targets = Array.from(selected).map((key) => {
+  1995→        const [type, id] = key.split(':')
+  1996→        return type === 'user' ? { receiverId: id } : { groupId: id }
+  1997→      })
+  1998→      const res = await api<{ forwarded: number }>('/api/messages/forward', {
+  1999→        method: 'POST',
+  2000→        body: JSON.stringify({ messageId: message.id, targets }),
+
+[showing lines 1-2000 of 2420; use offset=2001 with limit to continue reading]

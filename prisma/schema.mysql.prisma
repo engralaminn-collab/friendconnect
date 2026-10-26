@@ -1,0 +1,418 @@
+// FriendConnect — Production MySQL Schema
+// This is the MySQL-compatible version of the Prisma schema.
+// For production deployment:
+//   1. Copy this to prisma/schema.prisma (replacing the SQLite version)
+//   2. Set DATABASE_URL=mysql://USER:PASSWORD@HOST:3306/friendconnect
+//   3. Run: bunx prisma migrate deploy
+//
+// Differences from SQLite schema:
+//   - provider = "mysql"
+//   - All @default(cuid()) work on MySQL
+//   - @db.Text for long text fields (bio, content, meta)
+//   - @db.LongText for very long fields
+//   - Index definitions preserved
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid()) @db.VarChar(128)
+  email        String   @unique @db.VarChar(255)
+  username     String   @unique @db.VarChar(64)
+  passwordHash String   @db.VarChar(255)
+  name         String   @db.VarChar(128)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  emailVerified     Boolean  @default(false)
+  twoFactorSecret   String?  @db.VarChar(255)
+  twoFactorEnabled  Boolean  @default(false)
+  twoFactorBackup   String?  @db.Text
+  role              String   @default("user") @db.VarChar(32)
+  fileQuotaBytes    Int      @default(104857600)
+  fileUsedBytes     Int      @default(0)
+
+  profile       Profile?
+  sessions      Session[]
+  sentRequests  Friendship[] @relation("FriendshipRequester")
+  recvRequests  Friendship[] @relation("FriendshipReceiver")
+  sentMessages  Message[]     @relation("MessageSender")
+  recvMessages  Message[]     @relation("MessageReceiver")
+  ownedGroups   Group[]       @relation("GroupOwner")
+  memberships   GroupMember[]
+  callsInitiated Call[]      @relation("CallCaller")
+  callsReceived   Call[]      @relation("CallReceiver")
+  notifications Notification[]
+  files         File[]
+  otpCode       String?  @db.VarChar(16)
+  otpExpiry     DateTime?
+  reactions     MessageReaction[]
+  chatPrefs     ChatPreference[]
+  stories       Story[]
+  storyViews    StoryView[]
+  starredMessages MessageStar[]
+  storyReplies  StoryReply[]
+  drafts        MessageDraft[]
+  storyReactions StoryReaction[]
+  broadcastLists BroadcastList[]
+  broadcastMemberships BroadcastMember[]
+  reminders      MessageReminder[]
+  auditLogs      AuditLog[]
+
+  @@index([email])
+  @@index([username])
+}
+
+model Profile {
+  id                 String   @id @default(cuid()) @db.VarChar(128)
+  userId             String   @unique @db.VarChar(128)
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  photoUrl           String?  @db.VarChar(512)
+  bio                String?  @db.Text
+  phone              String?  @db.VarChar(32)
+  location           String?  @db.VarChar(128)
+  birthday           String?  @db.VarChar(16)
+  education          String?  @db.VarChar(255)
+  work               String?  @db.VarChar(255)
+  profileVisibility  String   @default("PUBLIC") @db.VarChar(16)
+  messagePermission  String   @default("FRIENDS") @db.VarChar(16)
+  callPermission     String   @default("FRIENDS") @db.VarChar(16)
+  readReceipts       Boolean  @default(true)
+  photoFilter        String?  @db.VarChar(64)
+  verified           String   @default("unverified") @db.VarChar(16)
+  lastSeen           DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Session {
+  id        String   @id @default(cuid()) @db.VarChar(128)
+  userId    String   @db.VarChar(128)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique @db.VarChar(255)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userAgent   String?  @db.Text
+  deviceName  String?  @db.VarChar(128)
+  ipAddress   String?  @db.VarChar(45)
+  lastActiveAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+model Friendship {
+  id          String   @id @default(cuid()) @db.VarChar(128)
+  requesterId String   @db.VarChar(128)
+  receiverId  String   @db.VarChar(128)
+  status      String   @default("PENDING") @db.VarChar(16)
+  blockerId   String?  @db.VarChar(128)
+  isCloseFriend Boolean @default(false)
+  storiesMuted Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requester User @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  receiver User @relation("FriendshipReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, receiverId])
+  @@index([status])
+}
+
+model Message {
+  id         String   @id @default(cuid()) @db.VarChar(128)
+  senderId   String   @db.VarChar(128)
+  receiverId String?  @db.VarChar(128)
+  groupId    String?  @db.VarChar(128)
+  content    String   @db.Text
+  type       String   @default("text") @db.VarChar(16)
+  fileUrl    String?  @db.VarChar(512)
+  fileName   String?  @db.VarChar(255)
+  fileSize   Int?
+  mimeType   String?  @db.VarChar(128)
+  status     String   @default("SENT") @db.VarChar(16)
+  createdAt  DateTime @default(now())
+  seenAt     DateTime?
+  deletedFor String   @default("") @db.Text
+  forwardedFrom String? @db.VarChar(128)
+  expiresAt DateTime?
+  editedAt  DateTime?
+  edited    Boolean  @default(false)
+  pinnedBy  String?  @db.VarChar(128)
+  replyToId String?  @db.VarChar(128)
+  scheduledFor DateTime?
+
+  sender   User   @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User?  @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  group    Group? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  reactions MessageReaction[]
+  starredBy MessageStar[]
+  reminders MessageReminder[]
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([groupId])
+  @@index([createdAt])
+}
+
+model Group {
+  id          String   @id @default(cuid()) @db.VarChar(128)
+  name        String   @db.VarChar(128)
+  description String?  @db.Text
+  photoUrl    String?  @db.VarChar(512)
+  createdBy   String   @db.VarChar(128)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner     User         @relation("GroupOwner", fields: [createdBy], references: [id], onDelete: Cascade)
+  members   GroupMember[]
+  messages  Message[]
+}
+
+model GroupMember {
+  id        String   @id @default(cuid()) @db.VarChar(128)
+  groupId   String   @db.VarChar(128)
+  userId    String   @db.VarChar(128)
+  role      String   @default("MEMBER") @db.VarChar(16)
+  joinedAt  DateTime @default(now())
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([userId])
+}
+
+model Call {
+  id         String    @id @default(cuid()) @db.VarChar(128)
+  callerId   String    @db.VarChar(128)
+  receiverId String?   @db.VarChar(128)
+  groupId    String?   @db.VarChar(128)
+  type       String    @default("audio") @db.VarChar(16)
+  status     String    @default("ringing") @db.VarChar(16)
+  startedAt  DateTime  @default(now())
+  endedAt    DateTime?
+  duration   Int?
+  answeredAt DateTime?
+  failureReason String? @db.VarChar(64)
+  connectionType String? @db.VarChar(16)
+
+  caller   User   @relation("CallCaller", fields: [callerId], references: [id], onDelete: Cascade)
+  receiver User?  @relation("CallReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([callerId])
+  @@index([receiverId])
+}
+
+model Notification {
+  id        String   @id @default(cuid()) @db.VarChar(128)
+  userId    String   @db.VarChar(128)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   @db.VarChar(32)
+  title     String   @db.VarChar(255)
+  body      String   @db.Text
+  data      String?  @db.Text
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model File {
+  id        String   @id @default(cuid()) @db.VarChar(128)
+  ownerId   String   @db.VarChar(128)
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name      String   @db.VarChar(255)
+  mimeType  String   @db.VarChar(128)
+  size      Int
+  url       String   @db.VarChar(512)
+  createdAt DateTime @default(now())
+
+  @@index([ownerId])
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid()) @db.VarChar(128)
+  messageId String   @db.VarChar(128)
+  userId    String   @db.VarChar(128)
+  emoji     String   @db.VarChar(8)
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+}
+
+model ChatPreference {
+  id        String   @id @default(cuid()) @db.VarChar(128)
+  userId    String   @db.VarChar(128)
+  peerId    String   @db.VarChar(128)
+  pinned    Boolean  @default(false)
+  muted     Boolean  @default(false)
+  disappearing String @default("OFF") @db.VarChar(8)
+  wallpaper String?  @db.Text
+  archived  Boolean  @default(false)
+  folder    String?  @db.VarChar(50)
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, peerId])
+}
+
+model Story {
+  id        String   @id @default(cuid()) @db.VarChar(128)
+  userId    String   @db.VarChar(128)
+  type      String   @default("text") @db.VarChar(16)
+  content   String   @db.Text
+  bg        String?  @db.VarChar(255)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  isHighlight Boolean @default(false)
+
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  views  StoryView[]
+  replies StoryReply[]
+  reactions StoryReaction[]
+
+  @@index([userId])
+}
+
+model StoryView {
+  id        String   @id @default(cuid()) @db.VarChar(128)
+  storyId   String   @db.VarChar(128)
+  userId    String   @db.VarChar(128)
+  viewedAt  DateTime @default(now())
+
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, userId])
+}
+
+model MessageStar {
+  id        String   @id @default(cuid()) @db.VarChar(128)
+  messageId String   @db.VarChar(128)
+  userId    String   @db.VarChar(128)
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+}
+
+model StoryReply {
+  id        String   @id @default(cuid()) @db.VarChar(128)
+  storyId   String   @db.VarChar(128)
+  userId    String   @db.VarChar(128)
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([storyId])
+}
+
+model MessageDraft {
+  id        String   @id @default(cuid()) @db.VarChar(128)
+  userId    String   @db.VarChar(128)
+  peerId    String   @db.VarChar(128)
+  isGroup   Boolean  @default(false)
+  content   String   @db.Text
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, peerId, isGroup])
+}
+
+model StoryReaction {
+  id        String   @id @default(cuid()) @db.VarChar(128)
+  storyId   String   @db.VarChar(128)
+  userId    String   @db.VarChar(128)
+  emoji     String   @db.VarChar(8)
+  createdAt DateTime @default(now())
+
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, userId])
+}
+
+model BroadcastList {
+  id        String   @id @default(cuid()) @db.VarChar(128)
+  ownerId   String   @db.VarChar(128)
+  name      String   @db.VarChar(128)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner   User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  members BroadcastMember[]
+
+  @@index([ownerId])
+}
+
+model BroadcastMember {
+  id            String   @id @default(cuid()) @db.VarChar(128)
+  broadcastId   String   @db.VarChar(128)
+  recipientId   String   @db.VarChar(128)
+  createdAt     DateTime @default(now())
+
+  broadcast BroadcastList @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+
+  @@unique([broadcastId, recipientId])
+}
+
+model MessageReminder {
+  id          String   @id @default(cuid()) @db.VarChar(128)
+  userId      String   @db.VarChar(128)
+  messageId   String   @db.VarChar(128)
+  remindAt    DateTime
+  createdAt   DateTime @default(now())
+  notified    Boolean  @default(false)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([userId, notified])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid()) @db.VarChar(128)
+  userId    String?  @db.VarChar(128)
+  action    String   @db.VarChar(64)
+  resource  String?  @db.VarChar(255)
+  ip        String?  @db.VarChar(45)
+  userAgent String?  @db.Text
+  meta      String?  @db.Text
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid()) @db.VarChar(128)
+  userId    String   @db.VarChar(128)
+  endpoint  String   @unique @db.Text
+  p256dh    String   @db.Text
+  auth      String   @db.Text
+  userAgent String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
