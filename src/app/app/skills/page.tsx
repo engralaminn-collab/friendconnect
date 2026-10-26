@@ -11,6 +11,7 @@ import {
   Code2,
   Compass,
   FileJson,
+  FolderTree,
   Layers,
   ListChecks,
   Package,
@@ -26,9 +27,13 @@ import {
 import { PageHeader, StatCard, FilterChip } from "@/components/app/PageHeader";
 import { Badge } from "@/components/ui/primitives";
 import {
+  CONTRIBUTION_AREAS,
+  CONTRIBUTION_RULES,
+  FOLDER_TEMPLATES,
   ITERATIVE_COMMANDS,
   MCP_SERVERS,
   ONBOARDING_STEPS,
+  RESOURCE_ENTRY_FORMAT,
   SKILLS,
   SKILL_CONTRACTS,
   type SkillFamily,
@@ -374,6 +379,99 @@ export default function SkillsPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ---------------- Contribution contract ---------------- */}
+      <div className="mt-4">
+        <h2 className="text-[15px] font-semibold">Contribution contract</h2>
+        <p className="mt-1 text-[12.5px] text-[var(--fc-fg-muted)]">
+          Skills, plugins, apps and safety patterns — and what each one has to
+          document before it is accepted.
+        </p>
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {CONTRIBUTION_AREAS.map((a) => (
+            <div key={a.id} className="fc-card p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="grid size-8 place-items-center rounded-lg bg-[var(--color-brand-500)]/10 text-[var(--color-brand-500)]">
+                  <FolderTree className="size-4" />
+                </span>
+                <span className="text-[13.5px] font-semibold">{a.area}</span>
+                <code className="ml-auto rounded bg-[var(--fc-surface-3)] px-1.5 py-0.5 font-mono text-[10.5px] text-[var(--fc-fg-muted)]">
+                  {a.where}
+                </code>
+              </div>
+              <p className="mt-2 text-[12px] leading-relaxed text-[var(--fc-fg-muted)]">
+                {a.detail}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1">
+                {a.examples.map((e) => (
+                  <span key={e} className="chip text-[10.5px]">
+                    {e}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+          <div className="fc-card p-5">
+            <h3 className="text-[15px] font-semibold">Folder templates</h3>
+            <div className="mt-3 space-y-3">
+              {FOLDER_TEMPLATES.map((t) => (
+                <div
+                  key={t.id}
+                  className="rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-3.5"
+                >
+                  <div className="text-[12.5px] font-semibold">{t.label}</div>
+                  <pre className="fc-scroll-thin mt-2 overflow-auto rounded-lg bg-[#0d1024] p-3 font-mono text-[10.5px] leading-relaxed text-emerald-300">
+                    {t.tree}
+                  </pre>
+                  <p className="mt-2 text-[11.5px] leading-relaxed text-[var(--fc-fg-muted)]">
+                    {t.note}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="fc-card p-5">
+              <h3 className="text-[15px] font-semibold">Rules of contribution</h3>
+              <ul className="mt-3 space-y-2">
+                {CONTRIBUTION_RULES.map((r) => (
+                  <li
+                    key={r.id}
+                    className="rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-3"
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <Check className="mt-0.5 size-3.5 shrink-0 text-emerald-500" />
+                      <div>
+                        <div className="text-[12.5px] font-semibold">{r.rule}</div>
+                        <p className="mt-0.5 text-[11.5px] leading-relaxed text-[var(--fc-fg-muted)]">
+                          {r.why}
+                        </p>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="fc-card p-5">
+              <h3 className="text-[15px] font-semibold">Resource entry format</h3>
+              <pre className="fc-scroll-thin mt-2 overflow-auto rounded-lg border border-[var(--fc-line)] bg-[#0d1024] p-3 font-mono text-[10.5px] leading-relaxed text-emerald-300">
+                {RESOURCE_ENTRY_FORMAT}
+              </pre>
+              <p className="mt-2 text-[11.5px] leading-relaxed text-[var(--fc-fg-muted)]">
+                One sentence, specific, factual, and tied to packaging,
+                scheduling, executing or safely operating a phone-call task. No
+                marketing language — it tells a reader nothing they can act on.
+              </p>
             </div>
           </div>
         </div>

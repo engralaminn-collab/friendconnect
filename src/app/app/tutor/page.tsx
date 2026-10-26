@@ -22,15 +22,19 @@ import { PageHeader, StatCard, FilterChip } from "@/components/app/PageHeader";
 import { Badge, Progress } from "@/components/ui/primitives";
 import {
   BUDDY_STAGES,
+  CERTIFICATES,
+  CLOZE_ITEMS,
   DICTIONARY,
+  EXAM_TRACKS,
   LEARNER_PROFILES,
   PRACTICE_QUESTIONS,
+  REFLECTION_REPORTS,
   SPEAKING_TOPICS,
   SPEECH_PIPELINE,
   TUTOR_LESSONS,
   TUTOR_LEVELS,
 } from "@/lib/data/tutor";
-import { analyseSentence, tutorReply } from "@/lib/tutor";
+import { analyseSentence, predictMasked, tutorReply } from "@/lib/tutor";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/store/useUI";
 
@@ -38,13 +42,18 @@ export default function TutorPage() {
   const toast = useToast();
   const [profileId, setProfileId] = React.useState(LEARNER_PROFILES[0].id);
   const [levelId, setLevelId] = React.useState("l1");
-  const [tab, setTab] = React.useState<"map" | "speak" | "practice" | "words">("map");
+  const [tab, setTab] = React.useState<
+    "map" | "speak" | "practice" | "words" | "exam"
+  >("map");
   const [sentence, setSentence] = React.useState("i have a apple and two books");
   const [recording, setRecording] = React.useState(false);
   const [recordSec, setRecordSec] = React.useState(0);
   const [wordIndex, setWordIndex] = React.useState(0);
   const [answer, setAnswer] = React.useState<number | null>(null);
   const [speakingTopic, setSpeakingTopic] = React.useState(SPEAKING_TOPICS[0].id);
+  const [clozeId, setClozeId] = React.useState(CLOZE_ITEMS[0].id);
+  const [clozePick, setClozePick] = React.useState<string | null>(null);
+  const [reportId, setReportId] = React.useState(REFLECTION_REPORTS[0].id);
 
   const profile = LEARNER_PROFILES.find((p) => p.id === profileId)!;
   const level = TUTOR_LEVELS.find((l) => l.id === levelId)!;
@@ -128,6 +137,7 @@ export default function TutorPage() {
             { id: "speak", label: "Speaking", icon: Mic },
             { id: "practice", label: "Practice", icon: Zap },
             { id: "words", label: "Dictionary", icon: Volume2 },
+            { id: "exam", label: "Exam lab", icon: Award },
           ] as const
         ).map((t) => (
           <button
@@ -624,6 +634,345 @@ export default function TutorPage() {
                   );
                 })}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================== EXAM =================== */}
+      {tab === "exam" && (
+        <div className="mt-4 grid gap-4 xl:grid-cols-[1.35fr_1fr]">
+          <div className="space-y-4">
+            <div className="fc-card p-5">
+              <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+                <Sparkles className="size-4 text-[var(--color-violet-500)]" />
+                Masked-language cloze
+              </h2>
+              <p className="mt-1 text-[12.5px] text-[var(--fc-fg-muted)]">
+                The standard business-English gap fill. The token is masked, the
+                offline model ranks the candidates against the context, and you
+                check whether the top guess was right.
+              </p>
+
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {CLOZE_ITEMS.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => {
+                      setClozeId(c.id);
+                      setClozePick(null);
+                    }}
+                    className={cn(
+                      "rounded-lg px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors",
+                      clozeId === c.id
+                        ? "bg-[var(--color-brand-500)]/[0.12] text-[var(--color-brand-500)]"
+                        : "text-[var(--fc-fg-muted)] hover:bg-[var(--fc-surface-2)]",
+                    )}
+                  >
+                    {c.track.toUpperCase()} · {c.level}
+                  </button>
+                ))}
+              </div>
+
+              {(() => {
+                const item = CLOZE_ITEMS.find((c) => c.id === clozeId)!;
+                const candidates = [item.answer, ...item.distractors];
+                const prediction = predictMasked(item.passage, candidates);
+                return (
+                  <div className="mt-4">
+                    <div className="rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-4">
+                      <p className="text-[14.5px] leading-[1.9]">
+                        {item.passage.split("___")[0]}
+                        <span className="mx-1 rounded bg-[var(--color-violet-500)]/15 px-2 py-0.5 font-mono text-[13px] font-bold text-[var(--color-violet-500)]">
+                          ▁▁▁
+                        </span>
+                        {item.passage.split("___")[1] ?? ""}
+                      </p>
+                    </div>
+
+                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                      {candidates.map((cand) => {
+                        const rank =
+                          prediction.ranked.findIndex((r) => r.candidate === cand) + 1;
+                        const chosen = clozePick === cand;
+                        const right = cand === item.answer;
+                        return (
+                          <button
+                            key={cand}
+                            onClick={() => setClozePick(cand)}
+                            className={cn(
+                              "rounded-xl border px-3 py-3 text-left transition-colors",
+                              chosen
+                                ? right
+                                  ? "border-emerald-500 bg-emerald-500/[0.08]"
+                                  : "border-rose-500 bg-rose-500/[0.08]"
+                                : "border-[var(--fc-line)] hover:bg-[var(--fc-surface-2)]",
+                            )}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-[13px] font-semibold">
+                                {cand}
+                              </span>
+                              <span className="ml-auto text-[10px] uppercase tracking-wide text-[var(--fc-fg-subtle)]">
+                                rank {rank}
+                              </span>
+                            </div>
+                            <div className="mt-1.5">
+                              <Progress
+                                value={
+                                  (prediction.ranked.find((r) => r.candidate === cand)
+                                    ?.score ?? 0) * 100
+                                }
+                                tone={rank === 1 ? "accent" : "brand"}
+                              />
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-3 text-[11.5px] text-[var(--fc-fg-subtle)]">
+                      <span>confidence {prediction.confidence}</span>
+                      <span>margin {prediction.margin}</span>
+                      <Badge
+                        tone={
+                          prediction.ranked[0]?.candidate === item.answer
+                            ? "success"
+                            : "danger"
+                        }
+                      >
+                        model top guess:{" "}
+                        {prediction.ranked[0]?.candidate}
+                      </Badge>
+                    </div>
+
+                    {clozePick && (
+                      <div
+                        className={cn(
+                          "mt-3 rounded-xl border p-3.5",
+                          clozePick === item.answer
+                            ? "border-emerald-500/30 bg-emerald-500/[0.06]"
+                            : "border-amber-500/30 bg-amber-500/[0.06]",
+                        )}
+                      >
+                        <div className="text-[12.5px] font-semibold">
+                          {clozePick === item.answer
+                            ? "Correct — that is the collocation."
+                            : `Not quite. The answer is “${item.answer}”.`}
+                        </div>
+                        <p className="mt-1 text-[11.5px] leading-relaxed text-[var(--fc-fg-muted)]">
+                          {item.gloss}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="fc-card p-5">
+              <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+                <Award className="size-4 text-[var(--color-signal-500)]" />
+                Exam tracks
+              </h2>
+              <p className="mt-1 text-[12.5px] text-[var(--fc-fg-muted)]">
+                Three tracks, section by section, with the scoring bands that decide
+                what a result means.
+              </p>
+              <div className="mt-4 space-y-3">
+                {EXAM_TRACKS.map((t) => (
+                  <div
+                    key={t.id}
+                    className="rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-4"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[13.5px] font-semibold">{t.name}</span>
+                      <Badge>{t.body}</Badge>
+                      <Badge tone="accent">
+                        {t.totalMinutes} min · {t.totalQuestions} questions
+                      </Badge>
+                    </div>
+                    <div className="mt-2.5 overflow-x-auto">
+                      <table className="w-full text-left text-[11.5px]">
+                        <thead className="text-[10px] uppercase tracking-wide text-[var(--fc-fg-subtle)]">
+                          <tr>
+                            <th className="py-1.5 pr-3 font-semibold">Section</th>
+                            <th className="py-1.5 pr-3 font-semibold">Time</th>
+                            <th className="py-1.5 pr-3 font-semibold">Questions</th>
+                            <th className="py-1.5 font-semibold">Format</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--fc-line)]">
+                          {t.sections.map((sec) => (
+                            <tr key={sec.name}>
+                              <td className="py-1.5 pr-3 font-semibold">
+                                {sec.name}
+                              </td>
+                              <td className="py-1.5 pr-3 tabular-nums">
+                                {sec.minutes}m
+                              </td>
+                              <td className="py-1.5 pr-3 tabular-nums">
+                                {sec.questions}
+                              </td>
+                              <td className="py-1.5 text-[var(--fc-fg-muted)]">
+                                {sec.detail}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                      {t.bands.map((b) => (
+                        <span
+                          key={b.label}
+                          className="rounded-lg border border-[var(--fc-line)] bg-[var(--fc-surface)] px-2 py-1 text-[10.5px]"
+                        >
+                          <span className="font-semibold">{b.label}</span>
+                          {b.min && (
+                            <span className="ml-1.5 text-[var(--fc-fg-subtle)]">
+                              {b.min}
+                            </span>
+                          )}
+                          {b.note && (
+                            <span className="ml-1.5 text-[var(--fc-fg-muted)]">
+                              {b.note}
+                            </span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="fc-card p-5">
+              <h3 className="text-[15px] font-semibold">Reflection report</h3>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {REFLECTION_REPORTS.map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => setReportId(r.id)}
+                    className={cn(
+                      "rounded-lg px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors",
+                      reportId === r.id
+                        ? "bg-[var(--color-brand-500)]/[0.12] text-[var(--color-brand-500)]"
+                        : "text-[var(--fc-fg-muted)] hover:bg-[var(--fc-surface-2)]",
+                    )}
+                  >
+                    {r.learner}
+                  </button>
+                ))}
+              </div>
+
+              {(() => {
+                const r = REFLECTION_REPORTS.find((x) => x.id === reportId)!;
+                return (
+                  <div className="mt-3 space-y-3">
+                    <div className="rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-3.5">
+                      <div className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-[var(--fc-fg-subtle)]">
+                        {r.period}
+                      </div>
+                      <p className="mt-1 text-[13px] leading-relaxed">{r.headline}</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      {r.evidence.map((e) => (
+                        <div
+                          key={e.label}
+                          className="rounded-xl border border-[var(--fc-line)] px-3 py-2"
+                        >
+                          <div className="text-[10.5px] uppercase tracking-wide text-[var(--fc-fg-subtle)]">
+                            {e.label}
+                          </div>
+                          <div className="mt-0.5 flex items-baseline gap-2">
+                            <span className="text-[15px] font-semibold">{e.value}</span>
+                            <span className="text-[11px] text-emerald-500">
+                              {e.change}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] p-3">
+                      <div className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-emerald-500">
+                        What improved
+                      </div>
+                      <ul className="mt-1.5 space-y-1">
+                        {r.strengths.map((s) => (
+                          <li
+                            key={s}
+                            className="flex items-start gap-2 text-[11.5px] leading-relaxed"
+                          >
+                            <Check className="mt-0.5 size-3 shrink-0 text-emerald-500" />
+                            {s}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="rounded-xl border border-[var(--color-signal-500)]/25 bg-[var(--color-signal-500)]/[0.06] p-3">
+                      <div className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-[var(--color-signal-500)]">
+                        What to work on
+                      </div>
+                      <ul className="mt-1.5 space-y-1">
+                        {r.focus.map((s) => (
+                          <li
+                            key={s}
+                            className="flex items-start gap-2 text-[11.5px] leading-relaxed"
+                          >
+                            <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[var(--color-signal-500)]" />
+                            {s}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <p className="rounded-xl border-l-2 border-[var(--color-brand-500)] bg-[var(--fc-surface-2)] px-3 py-2 text-[12px] italic leading-relaxed text-[var(--fc-fg-muted)]">
+                      “{r.quote}”
+                    </p>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="fc-card p-5">
+              <h3 className="text-[15px] font-semibold">Certificates</h3>
+              <ul className="mt-3 space-y-2">
+                {CERTIFICATES.map((c) => (
+                  <li
+                    key={c.id}
+                    className="rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Award className="size-3.5 text-[var(--color-signal-500)]" />
+                      <span className="text-[12.5px] font-semibold">{c.learner}</span>
+                      <Badge
+                        tone={
+                          c.kind === "exam"
+                            ? "accent"
+                            : c.kind === "milestone"
+                            ? "violet"
+                            : "success"
+                        }
+                      >
+                        {c.kind}
+                      </Badge>
+                      <span className="ml-auto text-[10.5px] text-[var(--fc-fg-subtle)]">
+                        {c.issuedAt}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-[12.5px]">{c.title}</div>
+                    <div className="mt-0.5 text-[11px] text-[var(--fc-fg-muted)]">
+                      {c.score} · {c.expiresAt}
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         </div>

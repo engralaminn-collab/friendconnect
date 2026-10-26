@@ -12,7 +12,9 @@ import {
   CalendarClock,
   Check,
   ChevronRight,
+  Download,
   CircleDot,
+  ClipboardCheck,
   Clock,
   FileText,
   Gauge,
@@ -45,24 +47,35 @@ import { Avatar, Badge, EmptyState, Progress } from "@/components/ui/primitives"
 import { AreaChart, BarChart, DonutChart } from "@/components/charts";
 import { useStore } from "@/store/useStore";
 import { useToast } from "@/store/useUI";
-import { cn, formatDuration } from "@/lib/utils";
+import { cn, downloadFile, formatDuration } from "@/lib/utils";
 import {
+  AUTO_TRIGGERS,
+  BOOKMARKED_MOMENTS,
+  MEETING_PREPS,
+  POLICY_LIMITS,
+  RECORDING_HISTORY,
+  RESUME_RULES,
   FLOW_PHASES,
   FLOW_TOOLS,
   MCP_TOOLS,
+  MEETING_WIZARDS,
   OUTBOUND_RECIPES,
   WORKFLOW_PLUGINS,
+  auditTranscript,
+  CHANNELS,
   checkConsent,
   computeMetrics,
   generateCall,
   liveAssist,
   coachingNudges,
+  matchAutoTriggers,
+  recordingToMarkdown,
   scoreCall,
   summariseCall,
   type Utterance,
 } from "@/lib/callcenter";
 
-type Tab = "live" | "after" | "flow" | "outbound" | "integrations";
+type Tab = "live" | "after" | "flow" | "outbound" | "integrations" | "prep";
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "live", label: "Live desk", icon: Headphones },
@@ -70,6 +83,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "flow", label: "Bot flow", icon: Bot },
   { id: "outbound", label: "Outbound", icon: Target },
   { id: "integrations", label: "Integrations", icon: Zap },
+  { id: "prep", label: "Prep & policy", icon: CalendarClock },
 ];
 
 export default function CallCentrePage() {
@@ -84,6 +98,12 @@ export default function CallCentrePage() {
   const [wallboard, setWallboard] = React.useState(false);
   const [recipeOpen, setRecipeOpen] = React.useState(false);
   const [recipeId, setRecipeId] = React.useState(OUTBOUND_RECIPES[0].id);
+  const [prepId, setPrepId] = React.useState(MEETING_PREPS[0].contact);
+  const [wizardId, setWizardId] = React.useState(MEETING_WIZARDS[0].id);
+  const [recordingId, setRecordingId] = React.useState(RECORDING_HISTORY[0].id);
+  const [triggerProbe, setTriggerProbe] = React.useState(
+    "I was charged twice for invoice 44821 and the app keeps showing an error.",
+  );
   const [consentArtifact, setConsentArtifact] = React.useState(
     "Booking confirmation #FC-88213 — reminder opted in on 12 Oct.",
   );
@@ -891,6 +911,61 @@ export default function CallCentrePage() {
             </div>
 
             <div className="fc-card p-5">
+              <h3 className="text-[15px] font-semibold">Channels</h3>
+              <p className="mt-1.5 text-[12.5px] leading-relaxed text-[var(--fc-fg-muted)]">
+                The same flow runs over voice and over SMS. What changes is how
+                much can be streamed, and how a half-finished message reads.
+              </p>
+              <ul className="mt-3 space-y-2">
+                {CHANNELS.map((c) => (
+                  <li
+                    key={c.id}
+                    className="rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[12.5px] font-semibold">{c.label}</span>
+                      <Badge tone={c.direction === "outbound" ? "signal" : "accent"}>
+                        {c.direction}
+                      </Badge>
+                      <Badge>{c.medium}</Badge>
+                      {c.supportsStreaming && (
+                        <Badge tone="success">streaming</Badge>
+                      )}
+                      {c.resumable && <Badge tone="violet">resumable</Badge>}
+                    </div>
+                    <p className="mt-1 text-[11.5px] leading-relaxed text-[var(--fc-fg-muted)]">
+                      {c.note}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="fc-card p-5">
+              <h3 className="text-[15px] font-semibold">Resuming a conversation</h3>
+              <p className="mt-1.5 text-[12.5px] leading-relaxed text-[var(--fc-fg-muted)]">
+                A conversation is suspended, not ended. These are the five cases
+                where that matters.
+              </p>
+              <ul className="mt-3 space-y-2">
+                {RESUME_RULES.map((r) => (
+                  <li
+                    key={r.id}
+                    className="rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-3"
+                  >
+                    <div className="text-[12.5px] font-semibold">{r.situation}</div>
+                    <p className="mt-0.5 text-[11.5px] leading-relaxed text-[var(--fc-fg-muted)]">
+                      {r.behaviour}
+                    </p>
+                    <p className="mt-1 text-[11px] text-[var(--color-accent-500)]">
+                      Keeps: {r.keeps}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="fc-card p-5">
               <h3 className="text-[15px] font-semibold">One record per conversation</h3>
               <p className="mt-1.5 text-[12.5px] leading-relaxed text-[var(--fc-fg-muted)]">
                 A call the bot answered, handed to a queue and an agent finished is one
@@ -1195,6 +1270,527 @@ export default function CallCentrePage() {
       )}
 
       {/* =================== INTEGRATIONS =================== */}
+      {tab === "prep" && (
+        <div className="mt-4 grid gap-4 xl:grid-cols-[1.35fr_1fr]">
+          <div className="space-y-4">
+            <div className="fc-card p-5">
+              <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+                <CalendarClock className="size-4 text-[var(--color-brand-500)]" />
+                Meeting preparation
+              </h2>
+              <p className="mt-1 text-[12.5px] text-[var(--fc-fg-muted)]">
+                Everything the agent needs before the call connects, pulled from the
+                CRM, the billing system, the schedule and the consent record.
+              </p>
+
+              <div className="mt-4 flex flex-wrap gap-1.5">
+                {MEETING_PREPS.map((b) => (
+                  <button
+                    key={b.contact}
+                    onClick={() => setPrepId(b.contact)}
+                    className={cn(
+                      "rounded-lg px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors",
+                      prepId === b.contact
+                        ? "bg-[var(--color-brand-500)]/[0.12] text-[var(--color-brand-500)]"
+                        : "text-[var(--fc-fg-muted)] hover:bg-[var(--fc-surface-2)]",
+                    )}
+                  >
+                    {b.contact}
+                  </button>
+                ))}
+              </div>
+
+              {(() => {
+                const brief = MEETING_PREPS.find((b) => b.contact === prepId)!;
+                return (
+                  <div className="mt-4 space-y-3">
+                    <div className="rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-3.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Avatar name={brief.contact} hue={226} size={34} />
+                        <span className="text-[13.5px] font-semibold">
+                          {brief.contact}
+                        </span>
+                        <span className="text-[11.5px] text-[var(--fc-fg-muted)]">
+                          {brief.company}
+                        </span>
+                        <Badge tone="accent">{brief.reason}</Badge>
+                      </div>
+                      <div className="mt-2.5 rounded-lg border-l-2 border-[var(--color-brand-500)] bg-[var(--fc-surface)] px-3 py-2">
+                        <div className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-[var(--fc-fg-subtle)]">
+                          Suggested opening
+                        </div>
+                        <p className="mt-1 text-[12.5px] leading-relaxed">
+                          {brief.opening}
+                        </p>
+                      </div>
+                    </div>
+
+                    <ul className="space-y-1.5">
+                      {brief.items.map((it) => (
+                        <li
+                          key={it.id}
+                          className="rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-3"
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge
+                              tone={
+                                it.source === "consent"
+                                  ? it.value.includes("not")
+                                    ? "danger"
+                                    : "success"
+                                  : it.source === "billing"
+                                  ? "signal"
+                                  : "accent"
+                              }
+                            >
+                              {it.source}
+                            </Badge>
+                            <span className="text-[12px] font-semibold">
+                              {it.label}
+                            </span>
+                            <span className="ml-auto text-[12px] font-semibold">
+                              {it.value}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[11.5px] leading-relaxed text-[var(--fc-fg-muted)]">
+                            {it.note}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+
+                    <div className="rounded-xl border border-[var(--color-signal-500)]/25 bg-[var(--color-signal-500)]/[0.06] p-3.5">
+                      <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.13em] text-[var(--color-signal-500)]">
+                        <AlertTriangle className="size-3.5" />
+                        Risks on this call
+                      </div>
+                      <ul className="mt-2 space-y-1.5">
+                        {brief.risks.map((r) => (
+                          <li
+                            key={r}
+                            className="flex items-start gap-2 text-[12px] leading-relaxed"
+                          >
+                            <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[var(--color-signal-500)]" />
+                            {r}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="fc-card p-5">
+              <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+                <ClipboardCheck className="size-4 text-[var(--color-violet-500)]" />
+                Transcript reliability gate
+              </h2>
+              <p className="mt-1 text-[12.5px] text-[var(--fc-fg-muted)]">
+                An offline auditor that looks for the shapes a speech recogniser
+                makes when it goes wrong — a loop, a boilerplate phantom, a run of
+                one speaker, a harm category nobody escalated. It reports what it
+                saw; it is not a certificate of accuracy.
+              </p>
+
+              {(() => {
+                const audit = auditTranscript(generated.utterances);
+                return (
+                  <div className="mt-4">
+                    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-3.5">
+                      <span
+                        className={cn(
+                          "rounded-lg px-2.5 py-1 text-[12px] font-bold tracking-wide",
+                          audit.grade === "RELIABLE"
+                            ? "bg-emerald-500/15 text-emerald-500"
+                            : audit.grade === "SUSPECT"
+                            ? "bg-[var(--color-signal-500)]/15 text-[var(--color-signal-500)]"
+                            : "bg-rose-500/15 text-rose-500",
+                        )}
+                      >
+                        {audit.grade}
+                      </span>
+                      <span className="text-[13px] font-semibold">
+                        {audit.score} / 100
+                      </span>
+                      <span className="min-w-0 flex-1 text-[11.5px] text-[var(--fc-fg-muted)]">
+                        {audit.note}
+                      </span>
+                    </div>
+
+                    {audit.symptoms.length === 0 ? (
+                      <p className="mt-3 rounded-xl border border-dashed border-[var(--fc-line)] p-4 text-center text-[12px] text-[var(--fc-fg-subtle)]">
+                        No hallucination symptoms visible in the text.
+                      </p>
+                    ) : (
+                      <ul className="mt-3 space-y-2">
+                        {audit.symptoms.map((s) => (
+                          <li
+                            key={s.id}
+                            className="rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-3"
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-[12.5px] font-semibold">
+                                {s.label}
+                              </span>
+                              <Badge
+                                tone={s.severity === "major" ? "danger" : "signal"}
+                              >
+                                {s.severity}
+                              </Badge>
+                              <span className="ml-auto text-[10.5px] tabular-nums text-[var(--fc-fg-subtle)]">
+                                −{s.weight}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-[11.5px] leading-relaxed text-[var(--fc-fg-muted)]">
+                              {s.detail}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="fc-card p-5">
+              <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+                <ShieldCheck className="size-4 text-emerald-500" />
+                Policy and limits
+              </h2>
+              <p className="mt-1 text-[12.5px] text-[var(--fc-fg-muted)]">
+                The rules the platform enforces, and where the enforcement lives. A
+                rule enforced only in the application is not a rule.
+              </p>
+              <ul className="mt-4 space-y-2">
+                {POLICY_LIMITS.map((p) => (
+                  <li
+                    key={p.id}
+                    className="rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[12.5px] font-semibold">{p.title}</span>
+                      <Badge tone={p.severity === "hard" ? "danger" : "neutral"}>
+                        {p.severity}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-[12px] leading-relaxed">{p.rule}</p>
+                    <p className="mt-1 text-[11.5px] leading-relaxed text-[var(--fc-fg-muted)]">
+                      {p.enforcement}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="fc-card p-5">
+              <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+                <CalendarClock className="size-4 text-[var(--color-accent-500)]" />
+                Setup wizard
+              </h2>
+              <p className="mt-1 text-[12.5px] text-[var(--fc-fg-muted)]">
+                The description of the call becomes probing questions and a
+                checklist, and the calendar comes with it.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {MEETING_WIZARDS.map((w) => (
+                  <button
+                    key={w.id}
+                    onClick={() => setWizardId(w.id)}
+                    className={cn(
+                      "rounded-lg px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors",
+                      wizardId === w.id
+                        ? "bg-[var(--color-brand-500)]/[0.12] text-[var(--color-brand-500)]"
+                        : "text-[var(--fc-fg-muted)] hover:bg-[var(--fc-surface-2)]",
+                    )}
+                  >
+                    {w.title}
+                  </button>
+                ))}
+              </div>
+
+              {(() => {
+                const w = MEETING_WIZARDS.find((x) => x.id === wizardId)!;
+                return (
+                  <div className="mt-3 space-y-3">
+                    <p className="text-[12px] leading-relaxed text-[var(--fc-fg-muted)]">
+                      {w.description}
+                    </p>
+
+                    <div>
+                      <span className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-[var(--fc-fg-subtle)]">
+                        Probing questions
+                      </span>
+                      <ol className="mt-1.5 space-y-1">
+                        {w.probingQuestions.map((q, i) => (
+                          <li
+                            key={q}
+                            className="flex items-start gap-2 text-[11.5px] leading-relaxed"
+                          >
+                            <span className="mt-0.5 grid size-4 shrink-0 place-items-center rounded-full bg-[var(--color-brand-500)]/12 text-[9px] font-bold text-[var(--color-brand-500)]">
+                              {i + 1}
+                            </span>
+                            {q}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+
+                    <div>
+                      <span className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-[var(--fc-fg-subtle)]">
+                        Checklist
+                      </span>
+                      <ul className="mt-1.5 space-y-1">
+                        {w.checklist.map((c) => (
+                          <li
+                            key={c.id}
+                            className="flex items-center gap-2 rounded-lg border border-[var(--fc-line)] px-2.5 py-1.5"
+                          >
+                            <span
+                              className={cn(
+                                "grid size-4 shrink-0 place-items-center rounded text-[9px] font-bold",
+                                c.done
+                                  ? "bg-emerald-500 text-white"
+                                  : "border border-[var(--fc-line)] text-[var(--fc-fg-subtle)]",
+                              )}
+                            >
+                              {c.done ? "✓" : ""}
+                            </span>
+                            <span className="min-w-0 flex-1 text-[11.5px]">
+                              {c.item}
+                            </span>
+                            <Badge>{c.owner}</Badge>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div>
+                      <span className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-[var(--fc-fg-subtle)]">
+                        Calendar
+                      </span>
+                      <ul className="mt-1.5 space-y-1">
+                        {w.calendar.map((c) => (
+                          <li
+                            key={c.id}
+                            className="flex items-center gap-2 rounded-lg border border-[var(--fc-line)] px-2.5 py-1.5"
+                          >
+                            <span className="text-[11.5px] tabular-nums text-[var(--fc-fg-subtle)]">
+                              {c.startsAt}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate text-[11.5px]">
+                              {c.title}
+                            </span>
+                            {c.synced && <Badge tone="success">synced</Badge>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="fc-card p-5">
+              <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+                <Radio className="size-4 text-[var(--color-brand-500)]" />
+                Recording history
+              </h2>
+              <p className="mt-1 text-[12.5px] text-[var(--fc-fg-muted)]">
+                Local-first: every recording with its transcript, its summary and
+                its metrics, exportable as one markdown file.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {RECORDING_HISTORY.map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => setRecordingId(r.id)}
+                    className={cn(
+                      "rounded-lg px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors",
+                      recordingId === r.id
+                        ? "bg-[var(--color-brand-500)]/[0.12] text-[var(--color-brand-500)]"
+                        : "text-[var(--fc-fg-muted)] hover:bg-[var(--fc-surface-2)]",
+                    )}
+                  >
+                    {r.contact}
+                  </button>
+                ))}
+              </div>
+
+              {(() => {
+                const rec = RECORDING_HISTORY.find((x) => x.id === recordingId)!;
+                const moments = BOOKMARKED_MOMENTS.filter(
+                  (m) => m.recordingId === rec.id,
+                );
+                return (
+                  <div className="mt-3 space-y-3">
+                    <div className="rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-3">
+                      <div className="flex flex-wrap items-center gap-2 text-[11.5px]">
+                        <span className="font-semibold">{rec.contact}</span>
+                        <Badge>{rec.channel}</Badge>
+                        <span className="tabular-nums text-[var(--fc-fg-subtle)]">
+                          {formatDuration(rec.durationSec)}
+                        </span>
+                        <span className="ml-auto text-[var(--fc-fg-subtle)]">
+                          {rec.startedAt.slice(0, 10)}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 text-[11.5px] leading-relaxed text-[var(--fc-fg-muted)]">
+                        {rec.summaryText}
+                      </p>
+                      <p className="mt-1.5 font-mono text-[10.5px] text-[var(--fc-fg-subtle)]">
+                        {rec.metricsText}
+                      </p>
+                    </div>
+
+                    {moments.length > 0 && (
+                      <div>
+                        <span className="text-[10.5px] font-bold uppercase tracking-[0.13em] text-[var(--fc-fg-subtle)]">
+                          Bookmarked moments
+                        </span>
+                        <ul className="mt-1.5 space-y-1.5">
+                          {moments.map((m) => (
+                            <li
+                              key={m.id}
+                              className="rounded-lg border border-[var(--fc-line)] bg-[var(--fc-surface-2)] px-2.5 py-2"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11.5px] font-semibold">
+                                  {m.label}
+                                </span>
+                                <span className="ml-auto text-[10.5px] tabular-nums text-[var(--fc-fg-subtle)]">
+                                  {formatDuration(m.atSec)}
+                                </span>
+                              </div>
+                              <p className="mt-0.5 text-[11px] leading-relaxed text-[var(--fc-fg-muted)]">
+                                {m.note}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    <pre className="fc-scroll-thin max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-3 font-mono text-[10.5px] leading-relaxed text-[var(--fc-fg-muted)]">
+                      {rec.transcriptText}
+                    </pre>
+
+                    <button
+                      onClick={() => {
+                        downloadFile(
+                          `${rec.contact.toLowerCase().replace(/\s+/g, "-")}-${rec.startedAt.slice(0, 10)}.md`,
+                          recordingToMarkdown(rec),
+                        );
+                        toast.success("Exported", "Transcript, summary and metrics.");
+                      }}
+                      className="btn btn-secondary btn-sm w-full"
+                    >
+                      <Download className="size-3.5" />
+                      Export markdown
+                    </button>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="fc-card p-5">
+              <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+                <Zap className="size-4 text-[var(--color-violet-500)]" />
+                MCP auto-trigger
+              </h2>
+              <p className="mt-1 text-[12.5px] text-[var(--fc-fg-muted)]">
+                When a caller says something that matches a rule, the tool fires by
+                itself and the answer lands on the assist card.
+              </p>
+
+              <label className="mt-3 block">
+                <span className="mb-1.5 block text-[11.5px] font-semibold">
+                  Test a live utterance
+                </span>
+                <textarea
+                  className="field min-h-[64px] resize-y text-[12.5px]"
+                  value={triggerProbe}
+                  onChange={(e) => setTriggerProbe(e.target.value)}
+                />
+              </label>
+
+              {(() => {
+                const hits = matchAutoTriggers(triggerProbe);
+                return (
+                  <div className="mt-3">
+                    {hits.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-[var(--fc-line)] p-4 text-center text-[12px] text-[var(--fc-fg-subtle)]">
+                        Nothing matched. The call continues with no tool fired.
+                      </div>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {hits.map((t) => (
+                          <li
+                            key={t.id}
+                            className="rounded-xl border border-[var(--color-violet-500)]/25 bg-[var(--color-violet-500)]/[0.07] p-3"
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge tone="violet">{t.server}</Badge>
+                              <code className="font-mono text-[11.5px] font-bold">
+                                {t.tool}
+                              </code>
+                              <span className="ml-auto text-[10.5px] tabular-nums text-[var(--fc-fg-subtle)]">
+                                {t.latencyMs}ms
+                              </span>
+                            </div>
+                            <p className="mt-1 text-[11.5px] leading-relaxed">
+                              {t.action}
+                            </p>
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                              {t.keywords.map((k) => (
+                                <span
+                                  key={k}
+                                  className="rounded bg-[var(--fc-surface-3)] px-1.5 py-0.5 font-mono text-[10px]"
+                                >
+                                  {k}
+                                </span>
+                              ))}
+                              {t.consent === "required" && (
+                                <Badge tone="danger">consent required</Badge>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })()}
+
+              <div className="mt-4 space-y-2">
+                {AUTO_TRIGGERS.map((t) => (
+                  <div
+                    key={t.id}
+                    className="rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge>{t.server}</Badge>
+                      <code className="font-mono text-[11px] font-bold">
+                        {t.tool}
+                      </code>
+                      {t.consent === "required" && (
+                        <Badge tone="danger">consent</Badge>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[11.5px] leading-relaxed text-[var(--fc-fg-muted)]">
+                      {t.when}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {tab === "integrations" && (
         <div className="mt-4 grid gap-4 xl:grid-cols-2">
           <div className="fc-card p-5">

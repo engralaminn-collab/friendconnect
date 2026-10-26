@@ -5,8 +5,10 @@ import {
   Accessibility,
   Boxes,
   Check,
+  ClipboardCopy,
   Component,
   Globe2,
+  KeyRound,
   Layers,
   Monitor,
   Palette,
@@ -23,16 +25,27 @@ import { Badge } from "@/components/ui/primitives";
 import { KitPreview } from "@/components/messaging/ChatKitPreviews";
 import {
   A11Y_CHECKS,
+  AUTH_FLOW,
+  AUTH_HEADERS,
   EXTENSIONS,
   KIT_COMPONENTS,
   KIT_FAMILIES,
   LOCALES,
+  PRESENCE_STATES,
+  SURFACES,
   THEME_TOKENS,
   type KitFamily,
 } from "@/lib/data/chatkit";
-import { cn } from "@/lib/utils";
+import { cn, copyToClipboard } from "@/lib/utils";
+import { useToast } from "@/store/useUI";
 
-type Tab = "components" | "platforms" | "theming" | "a11y" | "extensions";
+type Tab =
+  | "components"
+  | "platforms"
+  | "theming"
+  | "a11y"
+  | "extensions"
+  | "session";
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "components", label: "Components", icon: Component },
@@ -40,6 +53,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "theming", label: "Theming", icon: Palette },
   { id: "a11y", label: "Accessibility", icon: Accessibility },
   { id: "extensions", label: "Extensions", icon: Puzzle },
+  { id: "session", label: "Session & surfaces", icon: KeyRound },
 ];
 
 const FAMILY_ICON: Record<KitFamily, React.ElementType> = {
@@ -64,6 +78,7 @@ const GROUPS = [
 ] as const;
 
 export default function ChatKitPage() {
+  const toast = useToast();
   const [tab, setTab] = React.useState<Tab>("components");
   const [group, setGroup] = React.useState<string>("All");
   const [family, setFamily] = React.useState<string>("all");
@@ -486,6 +501,138 @@ npx @cometchat/skills add --ide cursor`}
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================== SESSION =================== */}
+      {tab === "session" && (
+        <div className="mt-4 grid gap-4 xl:grid-cols-[1.3fr_1fr]">
+          <div className="space-y-4">
+            <div className="fc-card p-5">
+              <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+                <KeyRound className="size-4 text-[var(--color-brand-500)]" />
+                Server-minted tokens
+              </h2>
+              <p className="mt-1 text-[12.5px] text-[var(--fc-fg-muted)]">
+                The client never holds the app key. Your server mints a short-lived
+                user token, the client exchanges it, and the chat service validates
+                the signature itself.
+              </p>
+
+              <ol className="mt-4 space-y-2">
+                {AUTH_FLOW.map((a, i) => (
+                  <li
+                    key={a.id}
+                    className="rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-3.5"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[var(--color-brand-500)] text-[10px] font-bold text-white">
+                        {i + 1}
+                      </span>
+                      <span className="text-[13px] font-semibold">{a.step}</span>
+                      <Badge>{a.who}</Badge>
+                      <span className="ml-auto text-[10.5px] text-[var(--fc-fg-subtle)]">
+                        {a.ttl}
+                      </span>
+                    </div>
+                    <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--fc-fg-muted)]">
+                      {a.detail}
+                    </p>
+                    <code className="mt-1.5 block font-mono text-[10.5px] text-[var(--fc-fg-subtle)]">
+                      {a.artifact}
+                    </code>
+                  </li>
+                ))}
+              </ol>
+
+              <div className="mt-4">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-[11.5px] font-semibold">
+                    The exchange, end to end
+                  </span>
+                  <button
+                    onClick={async () => {
+                      const ok = await copyToClipboard(AUTH_HEADERS);
+                      toast[ok ? "success" : "error"](ok ? "Copied" : "Copy failed");
+                    }}
+                    className="grid size-6 place-items-center rounded-md bg-[var(--fc-surface-3)] text-[var(--fc-fg-subtle)] hover:text-[var(--fc-fg)]"
+                  >
+                    <ClipboardCopy className="size-3" />
+                  </button>
+                </div>
+                <pre className="fc-scroll-thin overflow-auto rounded-lg border border-[var(--fc-line)] bg-[#0d1024] p-3 font-mono text-[10.5px] leading-relaxed text-emerald-300">
+                  {AUTH_HEADERS}
+                </pre>
+              </div>
+            </div>
+
+            <div className="fc-card p-5">
+              <h2 className="text-[15px] font-semibold">Presence</h2>
+              <p className="mt-1 text-[12.5px] text-[var(--fc-fg-muted)]">
+                Six states, and one of them is &quot;hidden&quot; — a state the person
+                who set it controls.
+              </p>
+              <ul className="mt-3 space-y-1.5">
+                {PRESENCE_STATES.map((p) => (
+                  <li
+                    key={p.id}
+                    className="flex flex-wrap items-center gap-2.5 rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] px-3 py-2"
+                  >
+                    <span
+                      className="size-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: p.colour }}
+                    />
+                    <span className="text-[12.5px] font-semibold">{p.label}</span>
+                    <span className="min-w-0 flex-1 text-[11.5px] text-[var(--fc-fg-muted)]">
+                      {p.meaning}
+                    </span>
+                    <span className="text-[10.5px] text-[var(--fc-fg-subtle)]">
+                      {p.visibleTo}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="fc-card p-5">
+              <h2 className="text-[15px] font-semibold">Surface contract</h2>
+              <p className="mt-1 text-[12.5px] text-[var(--fc-fg-muted)]">
+                The surfaces a chat client has to get right, and every state each
+                one has to handle.
+              </p>
+              <ul className="mt-3 space-y-2">
+                {SURFACES.map((s) => (
+                  <li
+                    key={s.id}
+                    className="rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-3.5"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[12.5px] font-semibold">{s.name}</span>
+                      <Badge>{s.group}</Badge>
+                      <span className="ml-auto text-[10.5px] text-[var(--fc-fg-subtle)]">
+                        {s.states.length} states · {s.platforms.length} platforms
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11.5px] leading-relaxed text-[var(--fc-fg-muted)]">
+                      {s.detail}
+                    </p>
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {s.states.map((st) => (
+                        <span
+                          key={st}
+                          className="rounded bg-[var(--fc-surface-3)] px-1.5 py-0.5 text-[10px]"
+                        >
+                          {st}
+                        </span>
+                      ))}
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         </div>

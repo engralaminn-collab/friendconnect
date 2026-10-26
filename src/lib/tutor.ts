@@ -486,3 +486,147 @@ export function tutorReply(analysis: SentenceAnalysis): string {
     return `Good attempt. One thing to fix: ${must[0].why} Change "${must[0].wrong}" to "${must[0].right}" and say it again.`;
   return `Nearly there. Small polish: ${analysis.corrections[0].why} Say it once more with that change.`;
 }
+
+/* ------------------------------------------------------------------ */
+/* masked-language cloze                                                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A small, deterministic stand-in for a masked-language model.
+ *
+ * It scores each candidate against the surrounding context using three
+ * signals: topical affinity from a hand-built concept table, morphological
+ * similarity to words already in the passage, and a stable tiebreak so the
+ * ranking never flickers between runs. It is not a transformer, and the UI
+ * says so — but it behaves like one: given a masked slot and a candidate set,
+ * it returns a ranked list with the confident answer first.
+ */
+
+const CONCEPT_TABLE: Record<string, string[]> = {
+  efficiency: [
+    "streamline",
+    "consolidate",
+    "reduce",
+    "efficiency",
+    "automatically",
+    "cost",
+    "process",
+    "delivery",
+    "recorded",
+  ],
+  money: [
+    "substantial",
+    "discount",
+    "fee",
+    "conference",
+    "register",
+    "month",
+    "percentage",
+    "cost",
+  ],
+  goal: ["objective", "goal", "reduce", "onboard", "client", "year"],
+  relationship: ["negative", "positive", "relationship", "quality", "sleep", "found"],
+  delay: ["actually", "accidentally", "announced", "enforced", "policy", "following"],
+  business: [
+    "subsidiary",
+    "subsequent",
+    "objective",
+    "obligation",
+    "client",
+    "company",
+    "attendees",
+  ],
+};
+
+function normaliseWord(w: string): string {
+  return w.toLowerCase().replace(/[^a-z]/g, "");
+}
+
+/** Words in the passage, minus the masked slot itself. */
+function contextWords(passage: string): string[] {
+  return passage
+    .split(/[^A-Za-z'-]+/)
+    .map(normaliseWord)
+    .filter((w) => w.length > 2);
+}
+
+/** A stable, seedless hash used for tie-breaking. */
+function hash(text: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) % 1000;
+}
+
+function affinity(candidate: string, words: string[]): number {
+  const c = normaliseWord(candidate);
+  let best = 0;
+  for (const [concept, members] of Object.entries(CONCEPT_TABLE)) {
+    const inConcept = members.some((m) => normaliseWord(m) === c);
+    if (!inConcept) continue;
+    const hits = words.filter((w) => members.includes(w)).length;
+    const signal = Math.min(1, hits / 3);
+    best = Math.max(best, 0.45 + signal * 0.5 - (concept === "business" ? 0 : 0));
+  }
+  return best;
+}
+
+function morphological(candidate: string, words: string[]): number {
+  const c = normaliseWord(candidate);
+  let best = 0;
+  for (const w of words) {
+    if (w === c) continue;
+    const shared = sharedPrefix(w, c);
+    if (shared >= 3) best = Math.max(best, 0.25 + shared / 40);
+  }
+  return best;
+}
+
+function sharedPrefix(a: string, b: string): number {
+  const n = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < n && a[i] === b[i]) i += 1;
+  return i;
+}
+
+export interface MaskedPrediction {
+  candidate: string;
+  score: number;
+}
+
+/** Ranks the candidates for a masked slot, best first. */
+export function rankCandidates(
+  passage: string,
+  candidates: string[],
+): MaskedPrediction[] {
+  const words = contextWords(passage);
+  return candidates
+    .map((candidate) => {
+      const a = affinity(candidate, words);
+      const m = morphological(candidate, words);
+      const t = hash(candidate) / 1000;
+      const score = Math.min(1, a * 0.6 + m * 0.3 + t * 0.1);
+      return { candidate, score: +score.toFixed(4) };
+    })
+    .sort((x, y) => (y.score === x.score ? x.candidate.localeCompare(y.candidate) : y.score - x.score));
+}
+
+/**
+ * Produces the model's view of a cloze item: the ranked candidates and the
+ * confidence margin between the best and the runner-up.
+ */
+export function predictMasked(
+  passage: string,
+  candidates: string[],
+): { ranked: MaskedPrediction[]; confidence: number; margin: number } {
+  const ranked = rankCandidates(passage, candidates);
+  const top = ranked[0]?.score ?? 0;
+  const second = ranked[1]?.score ?? 0;
+  return {
+    ranked,
+    confidence: +top.toFixed(3),
+    margin: +(top - second).toFixed(3),
+  };
+}

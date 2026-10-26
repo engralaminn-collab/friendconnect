@@ -189,3 +189,298 @@ export const SPEAKING_TOPICS: {
   { id: "sp7", levelId: "l6", title: "A difficult decision", prompt: "Tell me about a hard choice you made, and what you learned.", seconds: 150, emoji: "⚖️" },
   { id: "sp8", levelId: "l7", title: "Explain it simply", prompt: "Explain what a computer network is, to someone who has never used one.", seconds: 180, emoji: "🧠" },
 ];
+
+/* ------------------------------------------------------------------ */
+/* exam tracks                                                          */
+/* ------------------------------------------------------------------ */
+
+export interface ExamTrack {
+  id: string;
+  name: string;
+  body: string;
+  sections: { name: string; minutes: number; questions: number; detail: string }[];
+  totalMinutes: number;
+  totalQuestions: number;
+  bands: { label: string; min: string; note: string }[];
+}
+
+export const EXAM_TRACKS: ExamTrack[] = [
+  {
+    id: "toefl_ibt",
+    name: "TOEFL iBT",
+    body: "ETS",
+    sections: [
+      { name: "Reading", minutes: 54, questions: 30, detail: "Three passages, with a word-level highlight as you read." },
+      { name: "Listening", minutes: 56, questions: 42, detail: "Six sections, each replayed once, with a transcript." },
+      { name: "Speaking", minutes: 16, questions: 4, detail: "Four recorded responses, scored against the rubric." },
+      { name: "Writing", minutes: 50, questions: 3, detail: "One integrated and two independent essays." },
+    ],
+    totalMinutes: 176,
+    totalQuestions: 79,
+    bands: [
+      { label: "Advanced", min: "100+", note: "Close to a native academic speaker." },
+      { label: "High intermediate", min: "79–99", note: "Comfortable at university in an English-medium country." },
+      { label: "Intermediate", min: "60–78", note: "Enough for a foundation year or a short course." },
+      { label: "Elementary", min: "0–59", note: "Keep working through the map before booking." },
+    ],
+  },
+  {
+    id: "ielts_academic",
+    name: "IELTS Academic",
+    body: "British Council",
+    sections: [
+      { name: "Listening", minutes: 30, questions: 40, detail: "Four recordings, each heard once, with a map question." },
+      { name: "Reading", minutes: 60, questions: 40, detail: "Three passages, 20 minutes each." },
+      { name: "Writing", minutes: 60, questions: 2, detail: "One task response of 150 words, one essay of 250." },
+      { name: "Speaking", minutes: 15, questions: 3, detail: "A two-part interview with the examiner." },
+    ],
+    totalMinutes: 165,
+    totalQuestions: 83,
+    bands: [
+      { label: "Band 9", min: "8.5+", note: "Mastery. Vocabulary range is not the constraint any more." },
+      { label: "Band 7–8", min: "7.0–8.4", note: "University entry in the UK, Canada and Australia." },
+      { label: "Band 6–7", min: "6.0–6.9", note: "Postgraduate coursework with a language module." },
+      { label: "Band 5–6", min: "5.0–5.9", note: "Pre-sessional or foundation." },
+    ],
+  },
+  {
+    id: "toeic",
+    name: "TOEIC (Listening & Reading)",
+    body: "ETS",
+    sections: [
+      { name: "Listening", minutes: 45, questions: 125, detail: "Seven parts, four of them photographs." },
+      { name: "Reading", minutes: 75, questions: 100, detail: "Seven parts, including the standard business English cloze." },
+    ],
+    totalMinutes: 120,
+    totalQuestions: 225,
+    bands: [
+      { label: "905–990", min: "905", note: "Business negotiation level." },
+      { label: "785–904", min: "785", note: "Meetings and email correspondence." },
+      { label: "545–784", min: "545", note: "Everyday workplace communication." },
+      { label: "Below 545", min: "0", note: "Start at level 2 and work up." },
+    ],
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/* masked-language cloze                                                 */
+/* ------------------------------------------------------------------ */
+
+export interface ClozeItem {
+  id: string;
+  track: string;
+  level: string;
+  passage: string;
+  /** The masked token, exactly as it appears between the markers. */
+  target: string;
+  /** The correct answer. */
+  answer: string;
+  /** Distractors, in a fixed order. */
+  distractors: string[];
+  /** What the masked-LM scored first, second, third. */
+  predicted: string[];
+  gloss: string;
+}
+
+export const CLOZE_ITEMS: ClozeItem[] = [
+  {
+    id: "cz1",
+    track: "toeic",
+    level: "L4",
+    passage:
+      "The company has decided to ___ its production line to a single site, which will reduce costs by roughly twelve per cent.",
+    target: "consolidate",
+    answer: "consolidate",
+    distractors: ["celebrate", "calculate", "contemplate"],
+    predicted: ["consolidate", "contemplate", "calculate"],
+    gloss:
+      "To consolidate is to bring several things into one. The clause after it — which will reduce costs — confirms a merge, not a celebration.",
+  },
+  {
+    id: "cz2",
+    track: "toeic",
+    level: "L4",
+    passage:
+      "Attendees who register before the fifteenth of the month will receive a ___ discount on the full conference fee.",
+    target: "substantial",
+    answer: "substantial",
+    distractors: ["subsequent", "subsidiary", "substantive"],
+    predicted: ["substantial", "substantive", "subsequent"],
+    gloss:
+      "All three words start with 'subs'. Only 'substantial' collocates with 'discount' to mean a discount that is large in amount.",
+  },
+  {
+    id: "cz3",
+    track: "toeic",
+    level: "L5",
+    passage:
+      "The manual explains how to ___ the delivery process so that each stage is recorded automatically.",
+    target: "streamline",
+    answer: "streamline",
+    distractors: ["straighten", "strengthen", "strain"],
+    predicted: ["streamline", "strengthen", "strain"],
+    gloss:
+      "Streamline means to make something simpler and more efficient, which is what 'so that each stage is recorded automatically' describes.",
+  },
+  {
+    id: "cz4",
+    track: "toeic",
+    level: "L5",
+    passage:
+      "Our ___ for the coming year is to reduce the time it takes to onboard a new client.",
+    target: "objective",
+    answer: "objective",
+    distractors: ["objection", "obligation", "obstacle"],
+    predicted: ["objective", "obligation", "obstacle"],
+    gloss:
+      "A stated goal for the year is an objective. An obligation is a duty; an obstacle is a hindrance.",
+  },
+  {
+    id: "cz5",
+    track: "ielts_academic",
+    level: "L6",
+    passage:
+      "The study found a ___ relationship between screen time before bed and the quality of sleep reported by participants.",
+    target: "negative",
+    answer: "negative",
+    distractors: ["neutrally", "neglected", "negotiable"],
+    predicted: ["negative", "negotiable", "neglected"],
+    gloss:
+      "Only 'negative' can modify 'relationship' in this sense; the other three belong to different parts of speech or collocations.",
+  },
+  {
+    id: "cz6",
+    track: "toefl_ibt",
+    level: "L6",
+    passage:
+      "Although the policy was announced in 2019, it was not ___ enforced until the following year.",
+    target: "actually",
+    answer: "actually",
+    distractors: "accidentally, actually".split(", "),
+    predicted: ["actually", "accidentally"],
+    gloss:
+      "The contrast between 'announced' and 'enforced' needs an adverb that stresses the delay — 'actually', not 'accidentally'.",
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/* reflection reports and certificates                                  */
+/* ------------------------------------------------------------------ */
+
+export interface ReflectionReport {
+  id: string;
+  learner: string;
+  period: string;
+  headline: string;
+  strengths: string[];
+  focus: string[];
+  evidence: { label: string; value: string; change: string }[];
+  quote: string;
+}
+
+export const REFLECTION_REPORTS: ReflectionReport[] = [
+  {
+    id: "rr1",
+    learner: "Mika",
+    period: "Last 14 days",
+    headline:
+      "Accuracy is up nine points, and the gain is concentrated in listening rather than speaking.",
+    strengths: [
+      "Consistent answer accuracy on listen-and-pick — nine in a row",
+      "Sentence ordering: the subject-before-verb rule is now automatic",
+      "Two full speaking sessions with no hesitation over the first sentence",
+    ],
+    focus: [
+      "Third-person singular in the present — 'she go' still appears under pressure",
+      "Article use before a plural noun, mostly in speech, not in writing",
+      "Passive voice in the writing track, which has not been practised at all",
+    ],
+    evidence: [
+      { label: "Accuracy", value: "86%", change: "+9 pts" },
+      { label: "Words known", value: "214", change: "+31" },
+      { label: "Minutes practised", value: "126", change: "+42" },
+      { label: "Words per minute", value: "71", change: "+6" },
+    ],
+    quote:
+      "I stopped translating in my head before I answer now. That is the whole difference.",
+  },
+  {
+    id: "rr2",
+    learner: "Sora",
+    period: "First 7 days",
+    headline:
+      "A strong start on level 1, with the basics already secure enough to move to the second zone.",
+    strengths: [
+      "Every lesson in zone 1 completed on the first attempt",
+      "Recognises all twenty-four classroom objects without audio",
+      "Sentences are short but grammatically complete",
+    ],
+    focus: [
+      "Past tense has not been introduced yet — that is the next thing to open",
+      "Liaison in fast speech: 'pick it up' is still heard as three words",
+      "Needs a second speaker to practise question forms",
+    ],
+    evidence: [
+      { label: "Accuracy", value: "71%", change: "+12 pts" },
+      { label: "Words known", value: "62", change: "+41" },
+      { label: "Minutes practised", value: "52", change: "+52" },
+      { label: "Words per minute", value: "38", change: "+9" },
+    ],
+    quote:
+      "I can order food now without looking at the menu. That felt impossible on Monday.",
+  },
+];
+
+export interface CertificateRecord {
+  id: string;
+  learner: string;
+  level: string;
+  title: string;
+  issuedAt: string;
+  score: string;
+  expiresAt: string;
+  kind: "level" | "exam" | "milestone";
+}
+
+export const CERTIFICATES: CertificateRecord[] = [
+  {
+    id: "ct1",
+    learner: "Mika",
+    level: "L3",
+    title: "Level 3 complete — everyday conversation",
+    issuedAt: "2026-10-08",
+    score: "94 points",
+    expiresAt: "no expiry",
+    kind: "level",
+  },
+  {
+    id: "ct2",
+    learner: "Mika",
+    level: "TOEIC",
+    title: "TOEIC Listening & Reading — 815",
+    issuedAt: "2026-09-19",
+    score: "815 / 990",
+    expiresAt: "2028-09-19",
+    kind: "exam",
+  },
+  {
+    id: "ct3",
+    learner: "Mika",
+    level: "L2",
+    title: "Level 2 complete — getting by",
+    issuedAt: "2026-09-02",
+    score: "88 points",
+    expiresAt: "no expiry",
+    kind: "level",
+  },
+  {
+    id: "ct4",
+    learner: "Sora",
+    level: "L1",
+    title: "First 50 words — milestone",
+    issuedAt: "2026-10-24",
+    score: "50 words",
+    expiresAt: "no expiry",
+    kind: "milestone",
+  },
+];

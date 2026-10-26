@@ -567,3 +567,123 @@ export const ITERATIVE_COMMANDS: { phrase: string; skill: string; effect: string
   { phrase: "turn on push", skill: "push", effect: "Wires the device token into the login and logout flow." },
   { phrase: "add the AI assistant", skill: "features", effect: "Adds the assistant user and the assistant chat surface." },
 ];
+
+/* ------------------------------------------------------------------ */
+/* community contribution contract                                       */
+/* ------------------------------------------------------------------ */
+
+export interface ContributionArea {
+  id: string;
+  area: string;
+  examples: string[];
+  where: string;
+  detail: string;
+}
+
+export const CONTRIBUTION_AREAS: ContributionArea[] = [
+  {
+    id: "ca_skills",
+    area: "Agent skills",
+    examples: [
+      "call-reminder",
+      "google-form-callback",
+      "outbound-call-skill-creator",
+      "call-transcript-reliability-gate",
+    ],
+    where: "skills/",
+    detail:
+      "A skill is a folder with a SKILL.md and optional references, scripts and assets. It teaches a host how to package, schedule, execute or safely operate one phone-call workflow.",
+  },
+  {
+    id: "ca_plugins",
+    area: "Workflow plugins",
+    examples: ["Dify tools", "n8n nodes", "Zapier actions", "HubSpot workflow actions", "Lark automation nodes"],
+    where: "plugins/",
+    detail:
+      "A plugin is a folder with a README, a manifest or config file, and examples. It must document its triggers, its inputs, its side effects, its credential handling, and how it is cancelled.",
+  },
+  {
+    id: "ca_apps",
+    area: "User-facing apps",
+    examples: ["call chat", "call review console", "call scheduler UI", "customer callback app", "business call workbench"],
+    where: "apps/python/ and apps/typescript/",
+    detail:
+      "An app is runnable. Anything that can place a call or create a recurring job must document setup, side effects, cancellation, credential handling, and a dry-run or preview mode.",
+  },
+  {
+    id: "ca_patterns",
+    area: "Safety patterns",
+    examples: ["consent scoping", "requested versus permitted fields", "gatekeeper disposition", "fail-closed routing", "fixture replay"],
+    where: "docs/ and skills/",
+    detail:
+      "The pattern library. A pattern without a worked example is a slogan, so each one ships with a reference implementation and a test.",
+  },
+];
+
+export const FOLDER_TEMPLATES: { id: string; label: string; tree: string; note: string }[] = [
+  {
+    id: "ft_skill",
+    label: "Skill folder",
+    tree: `skill-name/
+├── SKILL.md
+├── references/
+├── scripts/
+└── assets/`,
+    note: "SKILL.md is the entry point: what it does, when it fires, and what it must never do.",
+  },
+  {
+    id: "ft_app",
+    label: "App directory",
+    tree: `apps/
+├── python/
+│   └── app-name/
+└── typescript/
+    └── app-name/`,
+    note: "Every app that can place a call or create a recurring job documents setup, side effects, cancellation, credentials, and a dry-run.",
+  },
+  {
+    id: "ft_plugin",
+    label: "Plugin directory",
+    tree: `plugins/
+└── plugin-name/
+    ├── README.md
+    ├── manifest-or-config-file
+    └── examples/`,
+    note: "Triggers, required inputs, side effects, credential handling, dry-run behaviour, and cancellation or rollback.",
+  },
+];
+
+export const CONTRIBUTION_RULES: { id: string; rule: string; why: string }[] = [
+  {
+    id: "cr1",
+    rule: "Portability first — the artifact should work across agent hosts where possible.",
+    why: "A skill that only runs in one host is a script, not a skill.",
+  },
+  {
+    id: "cr2",
+    rule: "Provider separation — the phone-call provider places the call; the host scheduler owns recurrence.",
+    why: "Mixing the two makes every example impossible to test and impossible to cancel.",
+  },
+  {
+    id: "cr3",
+    rule: "Safety by default — phone numbers, consent, credentials, and medical, legal, financial or emergency boundaries are explicit.",
+    why: "Phone-call workflows create real-world side effects. An implicit boundary is not a boundary.",
+  },
+  {
+    id: "cr4",
+    rule: "Explicit and inspectable — keep examples easy to read, safe to try without a real call, and clear about cancellation.",
+    why: "Somebody has to run this in production on a Tuesday afternoon.",
+  },
+  {
+    id: "cr5",
+    rule: "Fixture replay by default — an example that dials a real number on first run is not an example.",
+    why: "A dry run is the difference between a contribution and an incident.",
+  },
+  {
+    id: "cr6",
+    rule: "Describe the artefact, not the excitement — one sentence on what it does and where it fits.",
+    why: "'A great tool for calling people!' tells a reader nothing they can act on.",
+  },
+];
+
+export const RESOURCE_ENTRY_FORMAT = `- [Project Name](https://example.com) - One sentence explaining why this is useful for AI-agent phone-call workflows.`;

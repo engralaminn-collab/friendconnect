@@ -37,7 +37,7 @@ npm start           # production server on 0.0.0.0:3000
 | `/app/messenger` | WhatsApp-style client: thread list with pin/mute/archive/search, reply quotes, reactions, starred messages, polls with live tallies, voice-note recorder with level meter, emoji picker, sticker keyboard, attachment menu (image · video · document · audio · location · contact · poll), media lightbox, per-thread search, read receipts, typing indicator, threaded replies, smart replies, an offline four-language translator, saved messages with notes, a notification feed, pinned-message view, a thread-scoped AI assistant, flag/report, kid-safe mode with guardian controls, and a Gibber sound-level channel for agent-to-agent traffic. The right rail carries the AI marketing CRM panel with lead score and next best action |
 | `/app/calls` | Twelve-key dialpad, call history with direction/duration/outcome, MOS and latency trend charts, microphone/camera/speaker profiles with a saved default, a packet-diagnostics modal (RTT, jitter, loss, MOS), a catalogue of native reference implementations (WebRTC Kotlin, VoIP Call Sample, Android Java Chat, Linphone iPhone, Linphone Core, a SIP↔WebRTC gateway and a recording pipeline), a browser-vs-native coverage matrix and the operational limits |
 | `/app/gateways` | Five live gateways — HTTP SMS, Domovina AI, ComfyUI, SIP and a webhook bridge. SMS console with cURL / Node SDK / raw JSON previews of the exact request, inbound-webhook routing with signature checks and retry rules, a ComfyUI prompt queue that shares the render straight into a chat, and a promise-based IPC console with per-channel latency and error stats |
-| `/app/callcenter` | A contact centre in five tabs — live desk (diarised transcript, PII redaction, live sentiment, assist cards, coaching nudges, talk-ratio/WPM/monologue metrics, supervisor wallboard), post-call (summary, key points, action items, risk flags, redacted transcript, six-axis QA scorecard, entity/topic/PII extraction), bot flow (scripted phases, tool catalogue, transitions, refusal examples), outbound (recipes, scheduler, consent gate with requested-vs-permitted fields, batch runner, unreached-vs-voicemail accounting) and integrations (workflow plugins, event names, MCP catalogue, inline JSON result) |
+| `/app/callcenter` | A contact centre in six tabs — live desk (diarised transcript, PII redaction, live sentiment, assist cards, coaching nudges, talk-ratio/WPM/monologue metrics, supervisor wallboard), post-call (summary, key points, action items, risk flags, redacted transcript, six-axis QA scorecard, entity/topic/PII extraction), bot flow (scripted phases, tool catalogue, transitions, refusal examples, channels and resumable-conversation rules, one-CDR-per-conversation), outbound (recipes, scheduler, consent gate with requested-vs-permitted fields, batch runner, unreached-vs-voicemail accounting), integrations (workflow plugins, event names, MCP catalogue, inline JSON result) and prep & policy (meeting prep briefs, setup wizard with probing questions and a dynamic checklist, calendar sync, transcript reliability gate, recording history with bookmarks and markdown export, policy limits and MCP auto-trigger) |
 
 ### CRM & Revenue
 | Module | What it does |
@@ -55,7 +55,7 @@ npm start           # production server on 0.0.0.0:3000
 | `/app/applications` | Status chips, per-application document checklist with third-party blockers, deadline risk, "where it stalls" analysis |
 | `/app/universities` | University catalogue with rankings, scholarships, per-year tuition, intakes, course requirements, tuition chart |
 | `/app/study` | Focus timer that auto-logs sessions, weekly plan, confidence tracking, skill radar |
-| `/app/tutor` | A voice-first English tutor that runs entirely on your own machine — seven CEFR levels, a local record→recognise→reason→synthesise speech pipeline, word-level highlighting with 0.8×/1.0×/1.2× playback, an offline dictionary with pronunciation, four exercise types, a 60-point pass mark, a buddy that evolves from an egg to a dragon, multi-learner profiles and certificates |
+| `/app/tutor` | A voice-first English tutor that runs entirely on your own machine — seven CEFR levels, a local record→recognise→reason→synthesise speech pipeline, word-level highlighting with 0.8×/1.0×/1.2× playback, an offline dictionary with pronunciation, four exercise types, a 60-point pass mark, a buddy that evolves from an egg to a dragon, multi-learner profiles and certificates. The exam lab adds TOEFL/IELTS/TOEIC tracks, a masked-language cloze with a deterministic offline scorer, reflection reports and issued certificates |
 
 ### AI Marketing
 | Module | What it does |
@@ -103,8 +103,8 @@ npm start           # production server on 0.0.0.0:3000
 ### Platform & AI
 | Module | What it does |
 | --- | --- |
-| `/app/chatkit` | The component inventory behind the messenger — 43 components across 7 families with live previews for 24 of them, platform parity for React/Angular/React Native/iOS/Android/Flutter, 17 theme tokens in four spellings, 10 locales (two right-to-left), the 10-point accessibility contract with focus order and screen-reader wording, and 18 extensions |
-| `/app/skills` | The pack that teaches an AI coding agent to build the messenger — 24 skills across 13 families, the four-stage onboarding journey (discover → understand → plan → approve), per-platform contract files, 12 iterative commands, and four MCP servers including the read-only documentation server with its tool catalogue and prompt recipes |
+| `/app/chatkit` | The component inventory behind the messenger — 43 components across 7 families with live previews for 24 of them, platform parity for React/Angular/React Native/iOS/Android/Flutter, 17 theme tokens in four spellings, 10 locales (two right-to-left), the 10-point accessibility contract with focus order and screen-reader wording, 18 extensions, and a session tab covering server-minted tokens, the six presence states and the surface contract for the details panel, typing indicator, unread badge and conference call |
+| `/app/skills` | The pack that teaches an AI coding agent to build the messenger — 24 skills across 13 families, the four-stage onboarding journey (discover → understand → plan → approve), per-platform contract files, 12 iterative commands, four MCP servers including the read-only documentation server with its tool catalogue and prompt recipes, and the community contribution contract (four contribution areas, three folder templates, six rules of contribution and the resource-entry format) |
 | `/app/testing` | Test generation from plain English acceptance criteria — Robot Framework suites, pytest modules and a test-case sheet, with local or cloud providers, a generation log, coverage breakdown, five safe defaults and the project layout |
 | `/app/glossary` | The AI coding dictionary — 60+ terms across 8 categories, each with a plain-English explanation, cross links and a see-also line |
 
@@ -217,6 +217,19 @@ plugins and an MCP tool catalogue.
 word table for Bengali, Spanish, French and Arabic. Longest phrases match
 first, and anything it cannot translate is reported rather than silently
 dropped.
+
+**Transcript reliability gate** (`auditTranscript` in `src/lib/callcenter.ts`) —
+an offline auditor that grades a transcript RELIABLE, SUSPECT or UNUSABLE from
+the symptoms visible in the text: a repetition loop, a boilerplate phantom, a
+single speaker, an unescalated harm category, a truncated ending and low
+lexical diversity. It reports what it saw and stops there — it is not a
+certificate of accuracy.
+
+**Masked-language cloze** (`predictMasked` in `src/lib/tutor.ts`) — a
+deterministic stand-in for a masked-language model. It scores each candidate
+against the surrounding context using topical affinity, morphological
+similarity and a stable tiebreak, then returns a ranked list with the
+confidence and the margin. Deterministic, offline, and honest about what it is.
 
 ---
 

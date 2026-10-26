@@ -196,3 +196,215 @@ export const EXTENSIONS: {
   { id: "push-notifications", name: "Push Notifications", description: "Background delivery for offline users, with per-conversation routing.", category: "messaging" },
   { id: "live-tracking", name: "Live Location", description: "Share a position that expires automatically.", category: "messaging" },
 ];
+
+/* ------------------------------------------------------------------ */
+/* session, auth and live-state surfaces                                */
+/* ------------------------------------------------------------------ */
+
+export interface AuthStep {
+  id: string;
+  step: string;
+  who: string;
+  detail: string;
+  artifact: string;
+  ttl: string;
+}
+
+export const AUTH_FLOW: AuthStep[] = [
+  {
+    id: "af1",
+    step: "App key",
+    who: "Your server",
+    detail:
+      "The app key never reaches a client. It is the only credential the server holds, and it is used to sign, never to authenticate a browser directly.",
+    artifact: "appKey held in a secret store",
+    ttl: "rotated on a schedule",
+  },
+  {
+    id: "af2",
+    step: "User token",
+    who: "Your server → your client",
+    detail:
+      "After your own login succeeds, the server mints a short-lived user token scoped to that user and that workspace. It is exchanged over TLS and never written to a log.",
+    artifact: "signed JWT, `uid` + `role` + `exp`",
+    ttl: "30 minutes",
+  },
+  {
+    id: "af3",
+    step: "Session token",
+    who: "Your client → the chat service",
+    detail:
+      "The client exchanges the user token for a session token bound to the device. The chat service validates the signature itself — it never calls your server on every request.",
+    artifact: "session token, device-bound",
+    ttl: "renewed every 15 minutes",
+  },
+  {
+    id: "af4",
+    step: "Live token",
+    who: "Your client → the chat service",
+    detail:
+      "Real-time messaging and calls need their own token with an explicit user list, because the WebSocket and the REST API authenticate differently.",
+    artifact: "live token, `users` claim",
+    ttl: "5 minutes",
+  },
+  {
+    id: "af5",
+    step: "Revocation",
+    who: "Your server",
+    detail:
+      "Revoking a user revokes the live token immediately and marks the session token for expiry. A deleted user gets a fresh rejection on the next request.",
+    artifact: "revocation list checked at session start",
+    ttl: "effective on the next request",
+  },
+];
+
+export const AUTH_HEADERS = `// 1. your server mints the user token
+const res = await fetch("/api/chat/session", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ uid: user.id }),
+});
+const { token } = await res.json();
+
+// 2. the client exchanges it for a session token
+await CometChat.login({ token });
+
+// 3. and for a live token used by messaging and calls
+const liveToken = await CometChat.createToken(
+  CometChat.TokenType.Live,
+  { uid: user.id },
+);`;
+
+export interface PresenceState {
+  id: string;
+  label: string;
+  colour: string;
+  meaning: string;
+  visibleTo: string;
+}
+
+export const PRESENCE_STATES: PresenceState[] = [
+  {
+    id: "online",
+    label: "Online",
+    colour: "#22c55e",
+    meaning: "The app is open and the socket is connected.",
+    visibleTo: "Everyone except blocked contacts",
+  },
+  {
+    id: "away",
+    label: "Away",
+    colour: "#f59e0b",
+    meaning: "The app is open but idle past the threshold.",
+    visibleTo: "Everyone",
+  },
+  {
+    id: "busy",
+    label: "Do not disturb",
+    colour: "#ef4444",
+    meaning: "Notifications are suppressed; calls still arrive.",
+    visibleTo: "Everyone",
+  },
+  {
+    id: "recently_active",
+    label: "Recently active",
+    colour: "#8b5cf6",
+    meaning: "Last seen within the last few minutes.",
+    visibleTo: "Everyone",
+  },
+  {
+    id: "offline",
+    label: "Offline",
+    colour: "#94a3b8",
+    meaning: "The app is closed or the socket has dropped.",
+    visibleTo: "Everyone",
+  },
+  {
+    id: "hidden",
+    label: "Hidden",
+    colour: "#64748b",
+    meaning: "The user has opted out of presence entirely.",
+    visibleTo: "Nobody",
+  },
+];
+
+export interface SurfaceSpec {
+  id: string;
+  name: string;
+  group: "Calling" | "Conversations" | "Utilities";
+  states: string[];
+  detail: string;
+  platforms: KitFamily[];
+}
+
+export const SURFACES: SurfaceSpec[] = [
+  {
+    id: "sf_details",
+    name: "Details side panel",
+    group: "Conversations",
+    states: [
+      "Profile header",
+      "Media gallery",
+      "Group members",
+      "Pinned messages",
+      "Shared links",
+      "Settings",
+    ],
+    detail:
+      "A second panel beside the conversation, not a modal. It keeps its own scroll position per conversation and remembers the last tab it was on.",
+    platforms: ["react", "angular", "react-native", "ios", "android", "flutter"],
+  },
+  {
+    id: "sf_typing",
+    name: "Typing indicator",
+    group: "Utilities",
+    states: ["Idle", "One person typing", "Several people typing", "Stopped"],
+    detail:
+      "Three animated dots for a single person, and a named list for several. The indicator is throttled so a fast typist does not flood the socket.",
+    platforms: ["react", "angular", "react-native", "ios", "android", "flutter"],
+  },
+  {
+    id: "sf_presence",
+    name: "Presence badge",
+    group: "Utilities",
+    states: PRESENCE_STATES.map((p) => p.label),
+    detail:
+      "A coloured dot on the avatar. Hidden states are hidden for the person who set them, not for everybody.",
+    platforms: ["react", "angular", "react-native", "ios", "android", "flutter"],
+  },
+  {
+    id: "sf_conference",
+    name: "Conference call",
+    group: "Calling",
+    states: [
+      "Joining",
+      "In the call",
+      "Muted",
+      "Camera off",
+      "Screen sharing",
+      "Reconnecting",
+      "Left",
+    ],
+    detail:
+      "A multi-party call with a grid, a speaker list and a single control bar. A participant who drops is re-offered with one tap rather than silently vanishing.",
+    platforms: ["react", "angular", "react-native", "ios", "android", "flutter"],
+  },
+  {
+    id: "sf_calllogs",
+    name: "Call logs",
+    group: "Calling",
+    states: ["Completed", "Unanswered", "Busy", "Failed", "Cancelled", "Rejected"],
+    detail:
+      "Every call with its direction, duration, outcome and — when it is a media call — the quality figures the client measured.",
+    platforms: ["react", "angular", "react-native", "ios", "android", "flutter"],
+  },
+  {
+    id: "sf_badge",
+    name: "Unread badge",
+    group: "Conversations",
+    states: ["Count", "Dot", "Muted", "Mentions only"],
+    detail:
+      "Counts unread messages per conversation, collapses to a dot above ninety-nine, and changes to a mention count when somebody names you.",
+    platforms: ["react", "angular", "react-native", "ios", "android", "flutter"],
+  },
+];

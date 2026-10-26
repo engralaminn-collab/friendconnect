@@ -911,3 +911,694 @@ export const MCP_TOOLS: McpTool[] = [
     ],
   },
 ];
+
+/* ------------------------------------------------------------------ */
+/* meeting preparation                                                  */
+/* ------------------------------------------------------------------ */
+
+export interface PrepItem {
+  id: string;
+  label: string;
+  value: string;
+  source: "crm" | "conversation" | "billing" | "schedule" | "consent" | "history";
+  note: string;
+}
+
+export interface PrepBrief {
+  contact: string;
+  company: string;
+  reason: string;
+  openedAt: string;
+  items: PrepItem[];
+  opening: string;
+  risks: string[];
+}
+
+export const MEETING_PREPS: PrepBrief[] = [
+  {
+    contact: "Priya Raman",
+    company: "Northwind Consulting",
+    reason: "Billing dispute — a duplicate charge on invoice 44821",
+    openedAt: "2026-10-26T09:12:00Z",
+    opening:
+      "Hi Priya — I have the duplicate charge on invoice 44821 in front of me, and I can see the original authorisation from the same afternoon. Let me get it reversed before we talk about anything else.",
+    risks: [
+      "Two prior escalations on the same invoice, both closed without a refund",
+      "The contact has asked for a written confirmation twice",
+      "Card details were read out on the previous call — do not repeat them",
+    ],
+    items: [
+      { id: "pi1", label: "Account", value: "Northwind Consulting — Team plan, 12 seats", source: "crm", note: "Renewal on 14 November — this dispute is on the renewal path." },
+      { id: "pi2", label: "Account value", value: "£14,400 annual", source: "crm", note: "Mid-size account. A bad resolution here costs the renewal." },
+      { id: "pi3", label: "Open items", value: "2 invoices unpaid, 1 chargeback open", source: "billing", note: "The chargeback is on the same invoice." },
+      { id: "pi4", label: "Consent", value: "Recording not consented — transcript only", source: "consent", note: "Fail closed: do not record, and do not ask on this call." },
+      { id: "pi5", label: "Prior contact", value: "3 calls, last on 4 October", source: "history", note: "Last call promised a callback that never came. Acknowledge it." },
+      { id: "pi6", label: "Schedule", value: "14 minutes booked, 25 minutes elapsed on the last one", source: "schedule", note: "Expect this to run long. Offer a follow-up slot." },
+    ],
+  },
+  {
+    contact: "Tomas Berg",
+    company: "Halden Freight",
+    reason: "Outage post-mortem — 40 minutes of downtime on 22 October",
+    openedAt: "2026-10-26T11:40:00Z",
+    opening:
+      "Thanks for making the time, Tomas. I have the incident timeline open — 40 minutes of downtime, 12 minutes of it unacknowledged on our side. I will take the timeline first, then your questions.",
+    risks: [
+      "The incident report credits our monitoring for catching it in 90 seconds, which it did not",
+      "They have a regulatory deadline for the post-mortem on 3 November",
+      "A credit was verbally offered by a previous agent and never applied",
+    ],
+    items: [
+      { id: "pi7", label: "Account", value: "Halden Freight — Enterprise, 40 seats", source: "crm", note: "Enterprise tier — the credit policy differs from the standard tier." },
+      { id: "pi8", label: "Incident", value: "INC-2291 — degraded read path", source: "billing", note: "Root cause still open in the engineering tracker." },
+      { id: "pi9", label: "Consent", value: "Recording consented on 24 October", source: "consent", note: "Artefact stored with the call record." },
+      { id: "pi10", label: "Prior contact", value: "2 calls, last on 24 October", source: "history", note: "The credit promise was made on the second call." },
+      { id: "pi11", label: "Schedule", value: "30 minutes booked for a post-mortem", source: "schedule", note: "Leave five minutes for the credit decision." },
+    ],
+  },
+  {
+    contact: "Ana Ferreira",
+    company: "Iberia Logistics",
+    reason: "New customer — onboarding and SSO setup",
+    openedAt: "2026-10-26T14:05:00Z",
+    opening:
+      "Good to meet you, Ana. I have your workspace already provisioned, so today I will get your team onto SSO and confirm who owns the first three routes.",
+    risks: [
+      "No SSO configuration exists yet — the setup guide must be sent before the call",
+      "The customer expected live from yesterday; the delay was ours",
+    ],
+    items: [
+      { id: "pi12", label: "Account", value: "Iberia Logistics — new, Team plan, 8 seats", source: "crm", note: "Created 21 October, first invoice 1 November." },
+      { id: "pi13", label: "Onboarding stage", value: "Provisioning done, SSO pending", source: "crm", note: "The setup guide was sent 23 October and opened twice." },
+      { id: "pi14", label: "Consent", value: "Consent not yet captured", source: "consent", note: "Fail closed: capture it before anything else, or keep the transcript only." },
+      { id: "pi15", label: "Schedule", value: "30 minutes booked", source: "schedule", note: "Leave room for the SSO walkthrough." },
+    ],
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/* policy and limits                                                    */
+/* ------------------------------------------------------------------ */
+
+export interface PolicyLimit {
+  id: string;
+  title: string;
+  rule: string;
+  enforcement: string;
+  severity: "hard" | "soft";
+}
+
+export const POLICY_LIMITS: PolicyLimit[] = [
+  {
+    id: "pl_recording",
+    title: "Recording limit",
+    rule: "A recording stops at two hours. The segment is archived and the recording stops, even mid-call.",
+    enforcement: "Enforced on the media plane, not by the application, so a crashed agent cannot extend it.",
+    severity: "hard",
+  },
+  {
+    id: "pl_consent",
+    title: "Consent is fail-closed",
+    rule: "If consent cannot be confirmed for a field, the field is stripped and the call proceeds without it.",
+    enforcement: "Requested fields are checked against permitted fields before every outbound attempt.",
+    severity: "hard",
+  },
+  {
+    id: "pl_cdr",
+    title: "One CDR per conversation",
+    rule: "A conversation produces one call detail record, one transcript and one recording.",
+    enforcement: "Fragments are merged at the end of the conversation — a queue is never three separate records.",
+    severity: "hard",
+  },
+  {
+    id: "pl_redaction",
+    title: "PII redaction before storage",
+    rule: "Card numbers, national identifiers and addresses are redacted from the stored transcript.",
+    enforcement: "Redaction runs on the utterance before it is written, not on read.",
+    severity: "hard",
+  },
+  {
+    id: "pl_handover",
+    title: "Handover carries the context",
+    rule: "A human handover passes the full transcript, the sentiment and the open actions — never a summary that hides the difficult part.",
+    enforcement: "The bot stops speaking the moment the queue accepts the transfer.",
+    severity: "hard",
+  },
+  {
+    id: "pl_unreached",
+    title: "Unreached is not voicemail",
+    rule: "A call that was not answered is recorded as unreached. Voicemail is recorded separately, with the message left.",
+    enforcement: "Separate counters, so an unreachable contact never inflates voicemail performance.",
+    severity: "soft",
+  },
+  {
+    id: "pl_latency",
+    title: "Assist latency budget",
+    rule: "Live assist cards must arrive within 400 ms or they are not shown.",
+    enforcement: "A slow card is worse than no card — the agent falls back to the transcript.",
+    severity: "soft",
+  },
+  {
+    id: "pl_hold",
+    title: "Hold before transfer",
+    rule: "An agent may hold a caller for no more than 90 seconds before a transfer.",
+    enforcement: "The queue shows the hold timer and warns at 60 seconds.",
+    severity: "soft",
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/* MCP auto-trigger                                                     */
+/* ------------------------------------------------------------------ */
+
+export interface AutoTrigger {
+  id: string;
+  server: string;
+  tool: string;
+  when: string;
+  keywords: string[];
+  action: string;
+  consent: "required" | "not-required";
+  latencyMs: number;
+}
+
+export const AUTO_TRIGGERS: AutoTrigger[] = [
+  {
+    id: "at1",
+    server: "billing",
+    tool: "lookup_charge",
+    when: "The caller names an invoice, a charge, or a duplicate payment.",
+    keywords: ["invoice", "charged", "charge", "duplicate", "refund", "payment"],
+    action: "Look the charge up and put the amount, date and status on the assist card.",
+    consent: "not-required",
+    latencyMs: 180,
+  },
+  {
+    id: "at2",
+    server: "status",
+    tool: "check_status",
+    when: "The caller reports an error, an outage or slowness.",
+    keywords: ["down", "outage", "error", "not working", "slow", "broken", "downtime"],
+    action: "Pull the incident list for the caller's region and show the current status.",
+    consent: "not-required",
+    latencyMs: 240,
+  },
+  {
+    id: "at3",
+    server: "crm",
+    tool: "lookup_account",
+    when: "The caller mentions a plan, a seat count, a contract or an invoice.",
+    keywords: ["plan", "seats", "contract", "renewal", "upgrade"],
+    action: "Show the account summary next to the conversation so the agent is never guessing.",
+    consent: "not-required",
+    latencyMs: 210,
+  },
+  {
+    id: "at4",
+    server: "support",
+    tool: "create_ticket",
+    when: "A defect is confirmed and the caller asks for it to be tracked.",
+    keywords: ["ticket", "track it", "raise it", "logged", "reference number"],
+    action: "Open the ticket and read the reference number back to the caller.",
+    consent: "not-required",
+    latencyMs: 320,
+  },
+  {
+    id: "at5",
+    server: "crm",
+    tool: "log_interaction",
+    when: "Any commitment is made on the call — a callback, a credit, a deadline.",
+    keywords: ["i will call", "we will credit", "by friday", "i'll send", "let me book"],
+    action: "Write the commitment to the CRM as a task with an owner and a date.",
+    consent: "not-required",
+    latencyMs: 260,
+  },
+  {
+    id: "at6",
+    server: "legal",
+    tool: "check_rights",
+    when: "The caller asks for a recorded copy of the call, or for their data.",
+    keywords: ["recorded copy", "my data", "subject access", "gdpr", "copy of the call"],
+    action: "Check what may lawfully be released before promising anything, and refuse if the answer is no.",
+    consent: "required",
+    latencyMs: 410,
+  },
+];
+
+/** Runs the auto-trigger rules against a live utterance. */
+export function matchAutoTriggers(text: string): AutoTrigger[] {
+  const lower = text.toLowerCase();
+  return AUTO_TRIGGERS.filter((t) =>
+    t.keywords.some((k) => lower.includes(k)),
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* transcript reliability gate                                           */
+/* ------------------------------------------------------------------ */
+
+export type TranscriptGrade = "RELIABLE" | "SUSPECT" | "UNUSABLE";
+
+export interface AuditSymptom {
+  id: string;
+  label: string;
+  detail: string;
+  severity: "minor" | "major";
+  weight: number;
+}
+
+export interface TranscriptAudit {
+  grade: TranscriptGrade;
+  score: number;
+  symptoms: AuditSymptom[];
+  note: string;
+}
+
+const BOILERPLATE = [
+  "thank you for calling",
+  "is there anything else",
+  "how can i help you today",
+  "your call has been recorded",
+  "please hold while i transfer you",
+  "for security purposes",
+  "have a great day",
+  "thanks for your patience",
+];
+
+/**
+ * Grades a transcript from the symptoms visible in the text.
+ *
+ * This is an offline auditor, not a proof of anything: it looks for the shapes
+ * a speech recogniser produces when it goes wrong — a loop, a boilerplate
+ * phantom, a run of one speaker, a harm category nobody handled. It reports
+ * what it saw and stops there.
+ */
+export function auditTranscript(utterances: Utterance[]): TranscriptAudit {
+  const symptoms: AuditSymptom[] = [];
+  const texts = utterances.map((u) => u.text.trim().toLowerCase());
+
+  // 1. loops — the same utterance repeated back to back
+  let maxRun = 1;
+  let run = 1;
+  for (let i = 1; i < texts.length; i += 1) {
+    if (texts[i] && texts[i] === texts[i - 1]) {
+      run += 1;
+      maxRun = Math.max(maxRun, run);
+    } else {
+      run = 1;
+    }
+  }
+  if (maxRun >= 3) {
+    symptoms.push({
+      id: "loop",
+      label: "Repetition loop",
+      detail: `One utterance was repeated ${maxRun} times in a row — the shape a recogniser produces when it latches onto a phrase.`,
+      severity: "major",
+      weight: 35,
+    });
+  }
+
+  // 2. boilerplate phantoms — stock phrases with no local referent
+  const phantoms = texts.filter((t) =>
+    BOILERPLATE.some((b) => t.includes(b)),
+  );
+  if (phantoms.length >= 2) {
+    symptoms.push({
+      id: "boilerplate",
+      label: "Boilerplate phantom",
+      detail: `${phantoms.length} stock phrases appear with nothing around them to justify them.`,
+      severity: "major",
+      weight: 25,
+    });
+  }
+
+  // 3. one speaker runs the whole call
+  const speakers = new Set(utterances.map((u) => u.speaker));
+  if (speakers.size === 1 && utterances.length > 4) {
+    symptoms.push({
+      id: "one_speaker",
+      label: "Single speaker",
+      detail:
+        "Only one speaker is present in the whole transcript. A real conversation has at least two.",
+      severity: "major",
+      weight: 30,
+    });
+  }
+
+  // 4. harm categories that were never escalated
+  const harmPatterns: { id: string; label: string; pattern: RegExp }[] = [
+    { id: "medical", label: "Medical", pattern: /\b(hospital|ambulance|chest pain|emergency|911|999|bleeding|seizure)\b/i },
+    { id: "legal", label: "Legal", pattern: /\b(arrest|subpoena|court order|lawyer|police|solicitor)\b/i },
+    { id: "financial", label: "Financial distress", pattern: /\b(cannot afford|homeless|evicted|bankruptcy|debt collector)\b/i },
+  ];
+  for (const h of harmPatterns) {
+    const hit = utterances.find((u) => h.pattern.test(u.text));
+    if (hit) {
+      symptoms.push({
+        id: `harm_${h.id}`,
+        label: `${h.label} raised, not escalated`,
+        detail: `“${hit.text.slice(0, 70)}” — a harm category that needs a human, and no handover was recorded.`,
+        severity: "major",
+        weight: 30,
+      });
+    }
+  }
+
+  // 5. truncated tail
+  if (utterances.length > 0) {
+    const last = utterances[utterances.length - 1].text.trim();
+    if (last.length > 0 && !/[.!?]$/.test(last)) {
+      symptoms.push({
+        id: "truncated",
+        label: "Truncated ending",
+        detail:
+          "The last utterance does not end in a full stop — the recording probably stopped mid-sentence.",
+        severity: "minor",
+        weight: 10,
+      });
+    }
+  }
+
+  // 6. lexical diversity
+  const words = texts.join(" ").split(/\s+/).filter((w) => w.length > 3);
+  const unique = new Set(words).size;
+  const diversity = words.length === 0 ? 1 : unique / words.length;
+  if (words.length > 40 && diversity < 0.32) {
+    symptoms.push({
+      id: "diversity",
+      label: "Low lexical diversity",
+      detail:
+        "The transcript repeats a very small vocabulary. A real call uses more words than this.",
+      severity: "minor",
+      weight: 12,
+    });
+  }
+
+  const penalty = symptoms.reduce((n, s) => n + s.weight, 0);
+  const score = Math.max(0, 100 - penalty);
+  const grade: TranscriptGrade =
+    penalty >= 55 ? "UNUSABLE" : penalty >= 20 ? "SUSPECT" : "RELIABLE";
+
+  const note =
+    grade === "RELIABLE"
+      ? "No hallucination symptoms visible in the text. This is an observation about the transcript, not a certificate of accuracy."
+      : grade === "SUSPECT"
+        ? "Something in the text does not look right. Read the transcript before you quote it."
+        : "The transcript shows the shapes of a recogniser that has gone wrong. Do not use it — re-record or re-run the call.";
+
+  return { grade, score, symptoms, note };
+}
+
+/* ------------------------------------------------------------------ */
+/* recording history and moments                                        */
+/* ------------------------------------------------------------------ */
+
+export interface RecordingRecord {
+  id: string;
+  contact: string;
+  startedAt: string;
+  durationSec: number;
+  channel: "you" | "them" | "both";
+  audioUrl: string;
+  transcriptId: string;
+  transcriptText: string;
+  summaryText: string;
+  metricsText: string;
+}
+
+export const RECORDING_HISTORY: RecordingRecord[] = [
+  {
+    id: "rec1",
+    contact: "Priya Raman",
+    startedAt: "2026-10-26T09:14:00Z",
+    durationSec: 942,
+    channel: "both",
+    audioUrl: "file:///recordings/2026-10-26-priya.mp3",
+    transcriptId: "cd_44821",
+    transcriptText:
+      "Priya: I was charged twice for invoice 44821 and it has not come back.\nAgent: I can see the original authorisation from the same afternoon, so I can reverse it.\nPriya: Please put that in writing as well.\nAgent: You will have the confirmation in your account within one working day.",
+    summaryText:
+      "Duplicate charge on invoice 44821 confirmed. Reversal raised; written confirmation promised within one working day.",
+    metricsText:
+      "Talk ratio 38/62 · 128 wpm · longest monologue 22s · 4 questions asked · sentiment neutral → positive",
+  },
+  {
+    id: "rec2",
+    contact: "Tomas Berg",
+    startedAt: "2026-10-26T11:41:00Z",
+    durationSec: 1685,
+    channel: "both",
+    audioUrl: "file:///recordings/2026-10-26-tomas.mp3",
+    transcriptId: "cd_inc2291",
+    transcriptText:
+      "Tomas: We had forty minutes of downtime on the twenty-second.\nAgent: The timeline shows the degraded read path from 09:12 to 09:52.\nTomas: Your monitoring did not catch it for twelve minutes.\nAgent: That is the part I will put in writing, and I will not argue it.",
+    summaryText:
+      "Post-mortem for INC-2291. The twelve-minute detection gap was acknowledged without qualification. A written post-mortem is due before 3 November.",
+    metricsText:
+      "Talk ratio 44/56 · 141 wpm · longest monologue 31s · 3 questions asked · sentiment negative → neutral",
+  },
+  {
+    id: "rec3",
+    contact: "Ana Ferreira",
+    startedAt: "2026-10-24T15:02:00Z",
+    durationSec: 118,
+    channel: "them",
+    audioUrl: "file:///recordings/2026-10-24-ana-voicemail.mp3",
+    transcriptId: "cd_voicemail_991",
+    transcriptText:
+      "Ana: Hi, it is Ana from Iberia Logistics — I am trying to set up the login for our team but I cannot find where to start.",
+    summaryText:
+      "Voicemail. The caller could not find the SSO setup guide, which was sent two days earlier and opened twice.",
+    metricsText:
+      "Voicemail · 1:58 · not a reach — the contact was never spoken to",
+  },
+];
+
+export interface BookmarkedMoment {
+  id: string;
+  recordingId: string;
+  contact: string;
+  atSec: number;
+  label: string;
+  note: string;
+}
+
+export const BOOKMARKED_MOMENTS: BookmarkedMoment[] = [
+  {
+    id: "bm1",
+    recordingId: "rec1",
+    contact: "Priya Raman",
+    atSec: 214,
+    label: "The moment it turned",
+    note: "“Please put that in writing as well.” The whole call turned on the written follow-up — commit to a date, not a promise.",
+  },
+  {
+    id: "bm2",
+    recordingId: "rec2",
+    contact: "Tomas Berg",
+    atSec: 611,
+    label: "The concession",
+    note: "“That is the part I will put in writing, and I will not argue it.” Do not soften this in the written post-mortem.",
+  },
+  {
+    id: "bm3",
+    recordingId: "rec1",
+    contact: "Priya Raman",
+    atSec: 77,
+    label: "The real complaint",
+    note: "The charge was never the problem. The problem was that the first call ended without a resolution.",
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/* meeting setup wizard                                                 */
+/* ------------------------------------------------------------------ */
+
+export interface MeetingWizard {
+  id: string;
+  title: string;
+  description: string;
+  probingQuestions: string[];
+  checklist: { id: string; item: string; owner: string; done: boolean }[];
+  calendar: { id: string; title: string; startsAt: string; source: string; synced: boolean }[];
+}
+
+export const MEETING_WIZARDS: MeetingWizard[] = [
+  {
+    id: "mw1",
+    title: "Billing dispute review",
+    description:
+      "A quarterly review with a customer who has already escalated once. The goal is a written resolution, not reassurance.",
+    probingQuestions: [
+      "Which invoice is this about, and how many times has it been charged?",
+      "What happened after the first call — was there a written answer?",
+      "What would make you consider this closed?",
+      "Who else needs to approve a credit on your side?",
+    ],
+    checklist: [
+      { id: "mc1", item: "Pull the invoice and the original authorisation", owner: "agent", done: true },
+      { id: "mc2", item: "Check the refund ledger for a prior reversal", owner: "agent", done: true },
+      { id: "mc3", item: "Confirm the credit limit for this account tier", owner: "supervisor", done: false },
+      { id: "mc4", item: "Agree the written-confirmation deadline out loud", owner: "agent", done: false },
+      { id: "mc5", item: "Log the escalation in the CRM", owner: "agent", done: false },
+    ],
+    calendar: [
+      { id: "cal1", title: "Billing review — Priya Raman", startsAt: "09:15", source: "Google Calendar", synced: true },
+      { id: "cal2", title: "Post-mortem — Halden Freight", startsAt: "11:45", source: "Google Calendar", synced: true },
+      { id: "cal3", title: "Onboarding — Iberia Logistics", startsAt: "14:10", source: "Google Calendar", synced: true },
+    ],
+  },
+  {
+    id: "mw2",
+    title: "Outage post-mortem",
+    description:
+      "An incident review where the customer already has a regulatory deadline. Do not defend; establish the timeline.",
+    probingQuestions: [
+      "Which window matters most to your team — the outage or the detection gap?",
+      "What did your customers see during those twelve minutes?",
+      "What does the post-mortem have to contain for you to sign it off?",
+      "Who signs it on your side, and by when?",
+    ],
+    checklist: [
+      { id: "mc6", item: "Pull the incident timeline", owner: "agent", done: true },
+      { id: "mc7", item: "Check whether a credit was already promised", owner: "agent", done: true },
+      { id: "mc8", item: "Get engineering to confirm the root cause status", owner: "supervisor", done: false },
+      { id: "mc9", item: "Apply the credit, do not just offer it", owner: "agent", done: false },
+      { id: "mc10", item: "Send the post-mortem before 3 November", owner: "agent", done: false },
+    ],
+    calendar: [
+      { id: "cal4", title: "INC-2291 review — internal", startsAt: "16:30", source: "Google Calendar", synced: true },
+    ],
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/* markdown export                                                      */
+/* ------------------------------------------------------------------ */
+
+/** Builds the markdown export: transcript, summary and metrics in one file. */
+export function recordingToMarkdown(rec: RecordingRecord): string {
+  return [
+    `# ${rec.contact} — ${new Date(rec.startedAt).toUTCString()}`,
+    "",
+    `**Duration:** ${Math.floor(rec.durationSec / 60)}m ${rec.durationSec % 60}s  `,
+    `**Channel:** ${rec.channel}  `,
+    `**Recording:** ${rec.audioUrl}  `,
+    `**Transcript id:** ${rec.transcriptId}`,
+    "",
+    "## Summary",
+    "",
+    rec.summaryText,
+    "",
+    "## Metrics",
+    "",
+    rec.metricsText,
+    "",
+    "## Transcript",
+    "",
+    rec.transcriptText,
+    "",
+  ].join("\n");
+}
+
+/* ------------------------------------------------------------------ */
+/* channels and resumable conversations                                  */
+/* ------------------------------------------------------------------ */
+
+export interface ChannelSpec {
+  id: string;
+  label: string;
+  direction: "inbound" | "outbound";
+  medium: "voice" | "sms";
+  supportsStreaming: boolean;
+  resumable: boolean;
+  note: string;
+}
+
+export const CHANNELS: ChannelSpec[] = [
+  {
+    id: "ch_voice_in",
+    label: "Voice — inbound",
+    direction: "inbound",
+    medium: "voice",
+    supportsStreaming: true,
+    resumable: true,
+    note:
+      "Audio is streamed in small frames so the model starts speaking before the caller finishes the sentence.",
+  },
+  {
+    id: "ch_voice_out",
+    label: "Voice — outbound",
+    direction: "outbound",
+    medium: "voice",
+    supportsStreaming: true,
+    resumable: true,
+    note:
+      "Consent-scoped outbound. The permitted-field set is checked before the first frame is generated, not after.",
+  },
+  {
+    id: "ch_sms_in",
+    label: "SMS — inbound",
+    direction: "inbound",
+    medium: "sms",
+    supportsStreaming: false,
+    resumable: true,
+    note:
+      "Text arrives as whole messages. A reply is sent as one message, because a half-sent sentence in a text thread reads as a mistake.",
+  },
+  {
+    id: "ch_sms_out",
+    label: "SMS — outbound",
+    direction: "outbound",
+    medium: "sms",
+    supportsStreaming: false,
+    resumable: true,
+    note:
+      "One message per action. If the workflow needs two replies, it sends two messages with a link between them.",
+  },
+];
+
+export interface ResumeRule {
+  id: string;
+  situation: string;
+  behaviour: string;
+  keeps: string;
+}
+
+export const RESUME_RULES: ResumeRule[] = [
+  {
+    id: "rr_handover",
+    situation: "The call is handed to a human and then handed back.",
+    behaviour:
+      "The conversation is suspended with a full context snapshot, not ended. The agent resumes in the same phase it left.",
+    keeps: "Every utterance, every tool result, every decision the bot made.",
+  },
+  {
+    id: "rr_drop",
+    situation: "The caller drops mid-sentence on a voice call.",
+    behaviour:
+      "The session stays open for 90 seconds. If the caller reconnects, the last utterance is replayed so they do not have to repeat it.",
+    keeps: "The transcript, the phase, and the pending tool result.",
+  },
+  {
+    id: "rr_sms",
+    situation: "A text conversation is picked up the next day.",
+    behaviour:
+      "The thread resumes from the last unanswered turn and the age of the conversation is stated, because a three-day-old answer needs a different opening.",
+    keeps: "The thread history and the outstanding action items.",
+  },
+  {
+    id: "rr_retry",
+    situation: "A tool call fails or times out.",
+    behaviour:
+      "The failure is spoken as a failure. The agent does not retry silently and it does not pretend the action happened.",
+    keeps: "The attempt, the error, and the refusal reason.",
+  },
+  {
+    id: "rr_stream",
+    situation: "The caller interrupts the agent mid-answer.",
+    behaviour:
+      "The stream is cancelled at the next frame boundary. Whatever the agent said up to that point stays in the transcript.",
+    keeps: "The partial utterance, marked as interrupted.",
+  },
+];
