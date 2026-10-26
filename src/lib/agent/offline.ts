@@ -65,6 +65,12 @@ export const OFFLINE_EXAMPLES = [
   "send message to Jane Okafor: sending the proposal now",
   "post to LinkedIn: We shipped a bounded agent loop today",
   "audit https://example.com/pricing",
+  "add student Amara Okoye amara@example.com",
+  "schedule webinar: Visa routes for Nigerian applicants",
+  "log a call with Jane Okafor for 12 minutes",
+  "post to the feed: We shipped the operator today",
+  "create a diagram Enquiry to enrolment: Enquiry, Counselling, Application, Offer, Visa",
+  "connect gateway HTTP SMS",
 ];
 
 /* ------------------------------------------------------------------ */
@@ -187,6 +193,24 @@ export function planOffline(task: string): Decision {
   }
 
   const logMatch = raw.match(/^log\s+(?:a\s+)?(call|email|meeting|note|task)\b(?:\s+(?:with|for)\s+([^:]+))?:?\s*(.*)$/i);
+  if (logMatch && logMatch[1].toLowerCase() === "call") {
+    const contact = stripQuotes(logMatch[2] ?? "").replace(/\s+for\s+\d+\s*(?:min|minutes)?$/i, "").trim();
+    const minutes = Number(raw.match(/\bfor\s+(\d+)\s*(?:min|minutes)\b/i)?.[1] ?? 0);
+    // A duration turns this into a call record; without one it stays an
+    // activity log entry, which keeps the older phrasing working.
+    if (contact && minutes > 0) {
+      push("log_call", {
+        contactName: contact,
+        direction: /incoming|received/i.test(text) ? "incoming" : "outgoing",
+        kind: /video/i.test(text) ? "video" : "audio",
+        durationSec: minutes * 60,
+      });
+      return {
+        content: `Logging a ${minutes}-minute call with ${contact}.`,
+        toolCalls: calls,
+      };
+    }
+  }
   if (logMatch) {
     const [, type, contact, title] = logMatch;
     push("log_activity", {
@@ -277,6 +301,97 @@ export function planOffline(task: string): Decision {
   if (/\b(status|snapshot|overview|summary|how are we|what.s happening)\b/.test(text)) {
     push("workspace_snapshot", {});
     return { content: "Taking a snapshot of the workspace.", toolCalls: calls };
+  }
+
+
+  /* ---------- newer surfaces: education, community, studios, ops ---------- */
+
+  const studentMatch = raw.match(/^(?:add|create|new|enrol|enroll)\s+student[:\s]+(.+)$/i);
+  if (studentMatch) {
+    const rest = stripQuotes(studentMatch[1]);
+    const email = rest.match(EMAIL)?.[0] ?? "";
+    const name = titleCase(
+      rest
+        .replace(EMAIL, "")
+        .replace(/\b(?:at|from)\s+.*$/i, "")
+        .replace(/[,;]+\s*$/, "")
+        .trim(),
+    );
+    if (!email || !name) {
+      return {
+        content: "Give me a name and an email, e.g. “add student Amara Okoye amara@example.com”.",
+        toolCalls: [],
+      };
+    }
+    push("create_student", { name, email });
+    return { content: `Adding ${name} to the education pipeline.`, toolCalls: calls };
+  }
+
+  const eventMatch = raw.match(
+    /^(?:schedule|create|add|book)\s+(?:an?\s+)?(webinar|event|meeting|deadline|launch|community)[:\s]+(.+)$/i,
+  );
+  if (eventMatch) {
+    const type = eventMatch[1].toLowerCase();
+    const title = stripQuotes(eventMatch[2]);
+    push("create_event", {
+      title,
+      type:
+        type === "webinar"
+          ? "webinar"
+          : type === "deadline"
+            ? "deadline"
+            : type === "launch"
+              ? "launch"
+              : type === "community"
+                ? "community"
+                : "meeting",
+    });
+    return { content: `Scheduling the ${type} “${title}”.`, toolCalls: calls };
+  }
+
+  const feedMatch = raw.match(/^(?:post|publish|announce)\s+(?:to\s+(?:the\s+)?(?:feed|community))?[:\s]+(.+)$/i);
+  if (feedMatch && !/linkedin|x\b|twitter|instagram/i.test(raw)) {
+    push("create_post", { body: stripQuotes(feedMatch[1]) });
+    return { content: "Posting that to the community feed.", toolCalls: calls };
+  }
+
+  const gatewayMatch = raw.match(/^(connect|disconnect|enable|disable|toggle)\s+(?:the\s+)?gateway[:\s]+(.+)$/i);
+  if (gatewayMatch) {
+    const off = /dis|disable/i.test(gatewayMatch[1]);
+    push("update_gateway", { query: stripQuotes(gatewayMatch[2]), connected: !off });
+    return { content: `${off ? "Disconnecting" : "Connecting"} that gateway.`, toolCalls: calls };
+  }
+
+  if (/\bkid[- ]?safe\b/.test(text)) {
+    const on = !/\b(off|disable|stop)\b/.test(text);
+    push("set_kid_safe", { on });
+    return { content: `Turning kid-safe mode ${on ? "on" : "off"}.`, toolCalls: calls };
+  }
+
+  if (/\b(notifications?|bell|badge)\b/.test(text) && /\b(mark|clear|read|dismiss)/.test(text)) {
+    push("mark_notifications_read", {});
+    return { content: "Clearing unread notifications.", toolCalls: calls };
+  }
+
+  const diagramMatch = raw.match(/^(?:create|draw|save|make)\s+(?:a\s+)?diagram[:\s]+(.+)$/i);
+  if (diagramMatch) {
+    const body = stripQuotes(diagramMatch[1]);
+    const [name, stepsRaw] = body.split(/[:—]>?|\bfrom\b/i);
+    const steps = (stepsRaw ?? "")
+      .split(/\s*(?:,|->|→|then)\s*/i)
+      .map((step) => stripQuotes(step))
+      .filter(Boolean);
+    push("save_diagram", { name: titleCase(name ?? "Flow"), steps });
+    return { content: `Drawing “${titleCase(name ?? "Flow")}”.`, toolCalls: calls };
+  }
+
+  const wikiMatch = raw.match(/^(?:wiki|document)\s+(?:page\s+)?[:“"]?(.+?)[”"]?(?::\s*(.+))?$/i);
+  if (wikiMatch && /^wiki\b/i.test(text)) {
+    push("create_wiki_page", {
+      title: titleCase(stripQuotes(wikiMatch[1])),
+      summary: stripQuotes(wikiMatch[2] ?? "Written by Bill Agent."),
+    });
+    return { content: "Writing that wiki page.", toolCalls: calls };
   }
 
   push("search_workspace", { query: raw, limit: 3 });

@@ -1,154 +1,228 @@
-# Server specification — alo-server-lap
+# Server specification and deployment
 
-The box this build is specified for, the slot it occupies, and the checks that
-prove it is alive. Everything here is copy-pasteable.
+Everything needed to put this build on **panel.alolabs.net** and keep it there.
+The short version is one command; the rest exists so nobody has to guess.
 
-## Host
+---
+
+## 1. Host
 
 | Item | Value |
 | --- | --- |
-| Host | `103.231.239.79` — Ubuntu 22.04 LTS |
-| Node | v24.22.1 via NVM |
+| Public IPv4 | `103.231.239.79` |
+| OS | Ubuntu 22.04 LTS |
+| Node | v24.22.1 via nvm (`~/.nvm/versions/node/v24.22.1/bin`) |
 | npm | 11.19.1 |
-| Process manager | PM2 7.1.1 |
-| Reverse proxy | Nginx 1.18.0 |
-| Data | SQLite 3.37 (single box) · MySQL 8 / PostgreSQL 14 (shared) |
-| Cache | Redis 6 (optional) |
-| DNS / CDN | Cloudflare, proxied |
-| TLS | Cloudflare origin certificate (Full/Strict) · Let’s Encrypt optional |
-| Framework | Next.js 16, App Router, standalone output |
+| PM2 | 7.1.1 |
+| Nginx | 1.18.0 |
+| Database (available) | PostgreSQL 14 · MySQL 8 · SQLite 3.37 |
+| Cache (available) | Redis 6 |
+| App directory | `/home/alamin/projects/friendconnect` |
+| PM2 process | `friendconnect` |
+| Internal port | `3012` |
+| Public hostname | `panel.alolabs.net` |
 
-## This app's slot
+> This app is local-first: the workspace, the exam room and Bill Agent keep
+> their state in the browser. The Node process serves the UI, the API routes and
+> the agent control surface. A database is only needed for accounts, media and
+> the realtime/messaging APIs — those routes answer honestly when it is absent.
 
-| Domain | PM2 app | Port | Repo |
-| --- | --- | --- | --- |
-| `panel.alolabs.net` | `friendconnect` | `3012` | `~/projects/friendconnect` |
+---
 
-```bash
-pm2 describe friendconnect
-curl -sS http://127.0.0.1:3012/api/health | jq
-```
-
-## Deploy
+## 2. Deploy
 
 ```bash
-cd ~/projects/friendconnect
-./scripts/deploy-alo-server.sh              # pull-free: deploys the checkout
+ssh alamin@103.231.239.79
+cd /home/alamin/projects/friendconnect
+git pull --ff-only
+./scripts/deploy-alo-server.sh
 ```
 
-The script — also shown in the workspace at **Bill Agent → Deployment** — does
-dependencies, migrations, build, PM2 restart-or-start, the Nginx vhost, a reload
-and two health checks. It is idempotent: running it twice changes nothing.
-`--skip-build` restarts without rebuilding.
+The script is idempotent and does, in order:
 
-### First run on a new box
+1. `npm ci --omit=dev=false` (falls back to `npm install` if no lockfile match)
+2. `npx prisma generate` and `npx prisma migrate deploy` (tolerant: a missing
+   database prints a warning and the deploy continues)
+3. `npm run build`
+4. `pm2 restart friendconnect || pm2 start ecosystem.config.cjs --only friendconnect`
+5. `pm2 save`
+6. writes `/etc/nginx/sites-available/panel.alolabs.net`, symlinks it into
+   `sites-enabled`, removes the default site, `nginx -t`, `systemctl reload nginx`
+7. `curl -fsS http://127.0.0.1:3012/api/health` and the manifest, then prints
+   the Cloudflare checklist
+
+Flags: `--skip-build` (config-only change), `--dry-run` (print the steps),
+`--help`.
+
+Environment overrides: `APP`, `DOMAIN`, `PORT`, `ROOT`.
+
+---
+
+## 3. Environment
+
+`/home/alamin/projects/friendconnect/.env.local`:
 
 ```bash
-# 1. Repo and environment
-git clone https://github.com/engralaminn-collab/friendconnect.git ~/projects/friendconnect
-cd ~/projects/friendconnect
-cp .env.example .env && $EDITOR .env        # DATABASE_URL, AUTH_SECRET, APP_URL, AGENT_TOKEN
-
-# 2. Dependencies and schema
-npm ci
-npm run db:push                              # first time only
-npm run build
-
-# 3. Process
-pm2 start ecosystem.config.cjs --env production
-pm2 save && pm2 startup                      # survive a reboot
-
-# 4. Proxy
-sudo ln -sf /etc/nginx/sites-available/panel.alolabs.net /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-## Environment
-
-```env
 NODE_ENV=production
 PORT=3012
-APP_URL=https://panel.alolabs.net
-ALLOWED_ORIGINS=https://panel.alolabs.net
 
-# SQLite on one box
-DATABASE_URL=file:./data/friendconnect.db
-# or shared MySQL 8
-# DATABASE_URL=mysql://friendconnect:***@127.0.0.1:3306/friendconnect
-# or shared PostgreSQL 14
-# DATABASE_URL=postgresql://friendconnect:***@127.0.0.1:5432/friendconnect
+# Public origin — used for absolute links and CORS
+NEXT_PUBLIC_SITE_URL=https://panel.alolabs.net
+NEXT_PUBLIC_APP_URL=https://panel.alolabs.net
 
-AUTH_SECRET=<openssl rand -base64 48>
-COOKIE_SECURE=auto
-MEDIA_DRIVER=local
-MEDIA_LOCAL_DIR=/home/alamin/data/friendconnect-media
+# Bill Agent control API. Set this before exposing the domain.
+# Leave empty only on localhost.
+AGENT_TOKEN=replace-with-a-long-random-string
 
-# Bill Agent control API — set before the domain is public
-AGENT_TOKEN=<openssl rand -hex 32>
-
-# Optional
-REDIS_URL=redis://127.0.0.1:6379
-TURN_SERVERS=turn:103.231.239.79:3478
-TURN_SECRET=<shared with coturn>
-TURN_REALM=alolabs.net
-
-# Only if /app must sit behind the session cookie
+# Workspace access: 0 = local-first (no login wall), 1 = session required
 WORKSPACE_REQUIRES_AUTH=0
+
+# Optional: email, push, media storage, database (see .env.example)
 ```
 
-## Health and logs
-
-| Check | Command | Healthy answer |
-| --- | --- | --- |
-| App | `curl -s http://127.0.0.1:3012/api/health` | `"status":"healthy"` |
-| Calls | `curl -s http://127.0.0.1:3012/api/webrtc/health` | `stun: true`, `turn: true` when TURN is configured |
-| Agent | `curl -s http://127.0.0.1:3012/api/agent/manifest` | JSON with `counts.tools` |
-| Process | `pm2 status` | `online`, restarts not climbing |
-| Logs | `pm2 logs friendconnect --lines 100` | `/home/alamin/.pm2/logs/friendconnect-*.log` |
-
-`degraded` is not a failure: it means an optional subsystem (Redis, SMTP, push)
-is unconfigured. `unhealthy` means the database is unreachable — fix that first.
-
-## Cloudflare
-
-1. A record `panel` → `103.231.239.79`, **Proxied**.
-2. SSL/TLS mode **Full (strict)** with an origin certificate on the box.
-   Flexible rewrites the origin scheme to http: Secure cookies get dropped and
-   browser calls fail intermittently. Do not ship on Flexible.
-3. Caching: bypass `/api/*` (the vhost above sets `no-store` on health).
-4. WebSockets are on by default; nothing to enable.
-
-## Backups and rollback
+Generate a token:
 
 ```bash
-./scripts/backup.sh                 # database + media; schedule daily at 03:15
-./scripts/restore.sh <archive>      # rehearse this once before you need it
-./scripts/rollback.sh               # previous release
+node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
 ```
 
-## AI-ready hosting, in concrete terms
+---
 
-An "AI-ready" panel means an agent can answer these questions itself. Here they
-are, with real endpoints:
+## 4. Nginx (written by the script)
 
-| Question | Where the answer lives |
+```nginx
+server {
+    listen 80;
+    server_name panel.alolabs.net;
+
+    client_max_body_size 25m;
+
+    location /api/agent/ {
+        proxy_pass http://127.0.0.1:3012;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        add_header Cache-Control "no-store";
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:3012;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+    }
+}
+```
+
+WebSocket upgrade headers are present because Socket.IO is mounted at the same
+origin; without them realtime degrades to polling and calls fail.
+
+---
+
+## 5. Cloudflare
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| SSL/TLS mode | **Full (strict)** | Flexible terminates TLS at the edge and rewrites the origin to `http`, which drops `Secure` cookies and breaks login. |
+| Always Use HTTPS | On | — |
+| WebSockets | On | realtime + calls |
+| Cache rule | Bypass for `/api/*` | stale API responses are worse than slow ones |
+| Cache rule | Cache `/ _next/static/*` | immutable assets |
+| Bot fight mode | Off for `/api/agent/*` | it would block the bearer-token calls |
+
+Origin certificate: Cloudflare Origin CA on the server, or Let's Encrypt with
+`certbot --nginx`. Do not enable "Under Attack" while testing the control API —
+it returns 403 to machine callers and looks like an auth bug.
+
+---
+
+## 6. Verification
+
+```bash
+# process and port
+pm2 status friendconnect
+ss -ltnp | grep 3012
+
+# app
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3012/            # 200
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3012/app/exam    # 200
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3012/app/bill-agent  # 200
+
+# health (states the database honestly)
+curl -s http://127.0.0.1:3012/api/health | head -c 300
+
+# agent control surface
+curl -s http://127.0.0.1:3012/api/agent/manifest | head -c 200
+curl -s -X POST http://127.0.0.1:3012/api/agent/commands \
+  -H 'Content-Type: application/json' -H "Authorization: Bearer $AGENT_TOKEN" \
+  -d '{"tool":"list_exam_papers","args":{}}'
+
+# logs
+pm2 logs friendconnect --lines 80
+tail -f /var/log/nginx/error.log
+```
+
+Through Cloudflare:
+
+```bash
+curl -sI https://panel.alolabs.net | head -3
+curl -s https://panel.alolabs.net/api/agent/manifest | head -c 160
+```
+
+---
+
+## 7. Operations
+
+| Task | Command |
 | --- | --- |
-| What can this deployment do? | `GET /api/agent/manifest` → 39 tools + schemas |
-| Is it healthy? | `GET /api/health` → database, Redis, email, push, uptime |
-| What is the current load? | `pm2 status`, `pm2 monit` |
-| Can I trigger work from outside? | `POST /api/agent/commands` (bearer `AGENT_TOKEN`) |
-| What changed? | Bill Agent → Runs & audit (export JSON/CSV) |
-| How do I deploy? | `./scripts/deploy-alo-server.sh` |
+| Restart | `pm2 restart friendconnect` |
+| Reload nginx | `sudo nginx -t && sudo systemctl reload nginx` |
+| Logs | `pm2 logs friendconnect --lines 200` |
+| Stop | `pm2 stop friendconnect` |
+| Start after reboot | `pm2 startup && pm2 save` (once) |
+| Back up media | `tar czf media-$(date +%F).tgz .private-media` |
+| Backup database | `pg_dump` / `mysqldump` depending on `DATABASE_URL` |
 
-That is the whole difference between a dashboard with a chatbot bolted on and a
-panel an agent can operate: a stable tool contract, a machine-readable manifest,
-an authenticated command path and an audit trail.
+### Rollback
 
-## Limits worth stating
+```bash
+cd /home/alamin/projects/friendconnect
+git log --oneline -5
+git checkout <previous-sha>
+./scripts/deploy-alo-server.sh
+```
 
-- The remote command queue is **server memory**, five-minute TTL. A restart drops
-  pending commands. Unattended automation needs a headless worker sharing the
-  registry, not a longer TTL.
-- Cross-network calls need TURN. Same-network calls work with STUN alone.
-- SQLite is right for one box and wrong for two. Switching to MySQL/PostgreSQL
-  is a schema + `DATABASE_URL` change (`scripts/migrate-mysql.sh`).
+The build is reproducible from the lockfile; no build artefacts are committed.
+
+---
+
+## 8. Troubleshooting
+
+| Symptom | Likely cause | Fix |
+| --- | --- | --- |
+| 502 from Nginx | app not listening | `pm2 status`, `pm2 logs friendconnect` |
+| Login loops back | Cloudflare Flexible | switch to Full (strict) |
+| `/api/agent/*` returns 401 | `AGENT_TOKEN` set, header missing | send `Authorization: Bearer …` |
+| `/api/agent/*` returns 403 | Cloudflare bot fight / WAF | allow the path for the calling IP |
+| Health says `database: error` | no `DATABASE_URL` or DB down | expected on this local-first deploy; set it only if you use accounts |
+| Blank page after deploy | stale build | `./scripts/deploy-alo-server.sh` (rebuild) |
+| Queue commands expire | no operator tab open | open `/app/bill-agent` in one tab |
+| Realtime drops after 60 s | WebSocket headers missing | re-run the script, `nginx -t` |
+
+---
+
+## 9. What is ready for other projects
+
+The pattern used here is portable: one PM2 process per app, one Nginx vhost per
+domain, a deploy script per app, a health endpoint that tells the truth, and an
+`/api/agent/manifest` + `/api/agent/commands` pair so an agent can operate the
+deployment's product surface without screen-scraping.
+
+To reuse it for another project on the same box, copy
+`scripts/deploy-alo-server.sh`, change `APP`, `DOMAIN`, `PORT`, and add the
+project's own tool registry. Nothing else needs to change.

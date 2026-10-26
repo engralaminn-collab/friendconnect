@@ -157,6 +157,83 @@ export function makeWorkspace(): WorkspacePort {
         : thread,
     );
   };
+  ws.addStudent = (student) => {
+    const created = {
+      ...student,
+      id: nextId("st"),
+      createdAt: new Date().toISOString(),
+      avatarHue: 210,
+    };
+    ws.students = [created, ...ws.students];
+    return created;
+  };
+  ws.addPost = (post) => {
+    const created = {
+      ...post,
+      id: nextId("po"),
+      createdAt: new Date().toISOString(),
+      likes: 0,
+      comments: 0,
+    };
+    ws.posts = [created, ...ws.posts];
+    return created;
+  };
+  ws.addEvent = (event) => {
+    const created = { ...event, id: nextId("ev") };
+    ws.events = [created, ...ws.events];
+    return created;
+  };
+  ws.addCall = (call) => {
+    const created = { ...call, id: nextId("cl") };
+    ws.calls = [created, ...ws.calls];
+    return created;
+  };
+  ws.toggleGateway = (id) => {
+    ws.gateways = ws.gateways.map((gateway) =>
+      gateway.id === id ? { ...gateway, connected: !gateway.connected } : gateway,
+    );
+  };
+  ws.updateGateway = (id, patch) => {
+    ws.gateways = ws.gateways.map((gateway) =>
+      gateway.id === id ? { ...gateway, ...patch } : gateway,
+    );
+  };
+  ws.togglePlugin = (id) => {
+    ws.plugins = ws.plugins.map((plugin) =>
+      plugin.id === id ? { ...plugin, installed: !plugin.installed } : plugin,
+    );
+  };
+  ws.toggleNotePin = (id) => {
+    ws.notes = ws.notes.map((note) => (note.id === id ? { ...note, pinned: !note.pinned } : note));
+  };
+  ws.updateWikiPage = (id, patch) => {
+    ws.wikiPages = ws.wikiPages.map((page) => (page.id === id ? { ...page, ...patch } : page));
+  };
+  ws.saveDiagram = (diagram) => {
+    const created = {
+      ...diagram,
+      id: diagram.id ?? nextId("dg"),
+      updatedAt: new Date().toISOString(),
+    };
+    ws.diagrams = [created, ...ws.diagrams.filter((item) => item.id !== created.id)];
+    return created;
+  };
+  ws.markAllNotificationsRead = () => {
+    ws.notifications = ws.notifications.map((notification) => ({ ...notification, read: true }));
+  };
+  ws.setKidSafe = (on) => {
+    ws.safety = { ...ws.safety, kidSafe: on };
+  };
+  ws.examAttempts = [];
+  ws.saveExamAttempt = (attempt) => {
+    const exists = ws.examAttempts.some((item) => item.id === attempt.id);
+    ws.examAttempts = exists
+      ? ws.examAttempts.map((item) => (item.id === attempt.id ? attempt : item))
+      : [attempt, ...ws.examAttempts];
+  };
+  ws.removeExamAttempt = (id) => {
+    ws.examAttempts = ws.examAttempts.filter((item) => item.id !== id);
+  };
   ws.addStudySession = (session) => {
     ws.studySessions = [{ ...session, id: nextId("ss") }, ...ws.studySessions];
   };

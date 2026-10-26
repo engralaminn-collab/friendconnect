@@ -1,153 +1,206 @@
-# Open-source providers
+# Open-source and self-hosted model providers
 
-Bill Agent talks to any endpoint that speaks one of two wires. The catalogue is
-open-weights first: if a model can be self-hosted, it belongs at the top of this
-list.
+The operator ships with **15 providers**. Seven are local runtimes you own, six
+are hosted endpoints that serve open-weight models, one is a router, and one is
+"anything OpenAI-compatible". The default is *offline* — no endpoint at all —
+because the tool registry works without a model.
 
-Configure everything at **`/app/bill-agent` → Providers**. Keys are stored in
-this browser and sent only to the endpoint they belong to.
+Everything in this document is configured from **Bill Agent → Providers**. Keys
+are stored in your browser and sent only to the endpoint you typed; the app has
+no proxy and no server-side key store.
 
-## The catalogue
+---
 
-| Provider | Kind | Licence | Wire | Default endpoint |
-| --- | --- | --- | --- | --- |
-| Ollama | local | MIT | ollama | `http://127.0.0.1:11434` |
-| vLLM | local | Apache-2.0 | openai | `http://127.0.0.1:8000/v1` |
-| llama.cpp server | local | MIT | openai | `http://127.0.0.1:8080/v1` |
-| LocalAI | local | MIT | openai | `http://127.0.0.1:8080/v1` |
-| LM Studio | local | proprietary, free | openai | `http://127.0.0.1:1234/v1` |
-| Hugging Face TGI | local | Apache-2.0 | openai | `http://127.0.0.1:8080/v1` |
-| OpenRouter | cloud | models vary | openai | `https://openrouter.ai/api/v1` |
-| Groq | cloud | hosted open weights | openai | `https://api.groq.com/openai/v1` |
-| Together AI | cloud | hosted open weights | openai | `https://api.together.xyz/v1` |
-| DeepSeek | cloud | MIT weights | openai | `https://api.deepseek.com/v1` |
-| Mistral | cloud | Apache-2.0 (most) | openai | `https://api.mistral.ai/v1` |
-| Fireworks | cloud | hosted open weights | openai | `https://api.fireworks.ai/inference/v1` |
-| Cerebras | cloud | hosted open weights | openai | `https://api.cerebras.ai/v1` |
-| Novita | cloud | hosted open weights | openai | `https://api.novita.ai/v3/openai` |
-| Custom | any | yours | openai | `http://127.0.0.1:4000/v1` |
+## 1. The catalogue
 
-"Hosted open weights" means the licence of the model is open, the hardware is
-not. Nothing in the code assumes a particular vendor.
+| Provider | Kind | Licence | Default base URL | Wire | Key |
+| --- | --- | --- | --- | --- | --- |
+| Ollama | local | MIT | `http://127.0.0.1:11434` | Ollama | no |
+| vLLM | local | Apache-2.0 | `http://127.0.0.1:8000/v1` | OpenAI | no |
+| llama.cpp server | local | MIT | `http://127.0.0.1:8080/v1` | OpenAI | no |
+| LocalAI | local | MIT | `http://127.0.0.1:8080/v1` | OpenAI | no |
+| LM Studio | local | proprietary (free) | `http://127.0.0.1:1234/v1` | OpenAI | no |
+| Text Generation WebUI | local | AGPL-3.0 | `http://127.0.0.1:5000/v1` | OpenAI | no |
+| Hugging Face TGI | local | Apache-2.0 | `http://127.0.0.1:8080/v1` | OpenAI | no |
+| OpenRouter | router | aggregator | `https://openrouter.ai/api/v1` | OpenAI | yes |
+| Groq | cloud | hosted | `https://api.groq.com/openai/v1` | OpenAI | yes |
+| Together | cloud | hosted | `https://api.together.xyz/v1` | OpenAI | yes |
+| DeepSeek | cloud | hosted | `https://api.deepseek.com/v1` | OpenAI | yes |
+| Mistral | cloud | hosted (weights open for some) | `https://api.mistral.ai/v1` | OpenAI | yes |
+| Fireworks | cloud | hosted | `https://api.fireworks.ai/inference/v1` | OpenAI | yes |
+| Cerebras | cloud | hosted | `https://api.cerebras.ai/v1` | OpenAI | yes |
+| Novita | cloud | hosted | `https://api.novita.ai/v3/openai` | OpenAI | yes |
+| Custom | any | — | whatever you type | OpenAI | optional |
 
-## Which model do I actually need?
+Two wires only: **OpenAI** (`POST {base}/chat/completions`, `GET {base}/models`)
+and **Ollama** (`POST {base}/api/chat`, `GET {base}/api/tags`). If your runtime
+speaks either, it works; `custom` covers the rest without a code change.
 
-A tool-calling operator is a different job from a chat model: it must emit
-structured calls and stop cleanly. In practice:
+---
 
-- **Reliable tool calls** — Qwen 2.5/3 (14B and up), Llama 3.3 70B, Mistral
-  Small 3.x, DeepSeek V3.
-- **Do not bother below ~7B** for multi-step work; the loop will stop at the
-  repetition guard because the model re-issues the same call.
-- **Long transcripts** (a 40-row list_contacts result plus a schema) need 16k+
-  context. Trim with `limit` arguments instead of a bigger model.
+## 2. Local runtimes, with the exact commands
 
-## Local setup, verbatim
-
-### Ollama (the default recommendation)
+### Ollama
 
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
-OLLAMA_ORIGINS="*" ollama serve          # allow the browser in
-ollama pull qwen2.5:14b                  # ~9 GB, good tool calling
+ollama pull qwen2.5:7b-instruct      # or llama3.1:8b, mistral-small, phi-4
+ollama serve                          # listens on 127.0.0.1:11434
 ```
 
-In Providers: base URL `http://127.0.0.1:11434`, model `qwen2.5:14b`, no key,
-press **Test connection**, then **Use this**.
+Because the app calls this **from the browser**, Ollama must allow the origin:
 
-`OLLAMA_ORIGINS="*"` is a development convenience. On a laptop that reaches the
-public internet, prefer `OLLAMA_ORIGINS="http://localhost:3000"`.
+```bash
+export OLLAMA_ORIGINS="http://localhost:3000,http://127.0.0.1:3000,https://panel.alolabs.net"
+```
+
+Set the provider base URL to `http://127.0.0.1:11434` (no `/v1`, no trailing
+slash — the app normalises either way) and press **Test**.
 
 ### vLLM
 
 ```bash
 pip install vllm
-vllm serve Qwen/Qwen2.5-14B-Instruct \
-  --host 0.0.0.0 --port 8000 \
-  --enable-auto-tool-choice --tool-call-parser hermes \
-  --allowed-origins '["*"]'
+python -m vllm.entrypoints.openai.api_server \
+  --model Qwen/Qwen2.5-7B-Instruct \
+  --port 8000 --enable-auto-tool-choice --tool-call-parser hermes
 ```
 
-`--enable-auto-tool-choice` and the parser are not optional: without them vLLM
-returns prose where a tool call was expected.
+`--enable-auto-tool-choice` matters: without a tool-call parser the model's
+JSON never becomes a tool call. Base URL: `http://127.0.0.1:8000/v1`.
 
 ### llama.cpp server
 
 ```bash
-llama-server -m qwen2.5-14b-instruct-q4_k_m.gguf \
-  --host 0.0.0.0 --port 8080 --jinja --ctx-size 16384
+llama-server -m ./models/qwen2.5-7b-instruct-q4_k_m.gguf \
+  --port 8080 --host 127.0.0.1 --jinja
 ```
 
-`--jinja` is what enables the model's tool template. Put a reverse proxy in front
-for TLS; the server's own CORS handling is minimal.
+`--jinja` is required for the OpenAI-compatible tool-calling path. Base URL:
+`http://127.0.0.1:8080/v1`.
 
 ### LocalAI
 
 ```bash
-docker run -p 8080:8080 --name localai localai/localai:latest
+docker run -p 8080:8080 --name local-ai \
+  -v $PWD/models:/models localai/localai:latest
 ```
+
+Base URL `http://127.0.0.1:8080/v1`. Model names are whatever you installed
+(`local-ai models list`).
 
 ### LM Studio
 
-Developer → Local Server → Start, then enable **CORS** in the same panel.
+Load a model, open **Developer → Start Server** (port 1234), and enable
+**Serve on Local Network** only if you need another machine to reach it. Base
+URL `http://127.0.0.1:1234/v1`.
+
+### Text Generation WebUI
+
+```bash
+./start_linux.sh --api --listen
+```
+
+Base URL `http://127.0.0.1:5000/v1`. Tool calling depends on the template; if
+your model cannot call tools, use the offline grammar or pick a tool-trained
+model.
 
 ### Hugging Face TGI
 
 ```bash
-text-generation-launcher --model-id Qwen/Qwen2.5-14B-Instruct --port 8080
+docker run --gpus all -p 8080:80 ghcr.io/huggingface/text-generation-inference:latest \
+  --model-id Qwen/Qwen2.5-7B-Instruct
 ```
 
-### Any OpenAI-compatible gateway
+Base URL `http://127.0.0.1:8080/v1`.
 
-LiteLLM, one-api, new-api, unorouter, or your own proxy: choose **Custom**, paste
-`http://host:port/v1`, set the model name the gateway exposes. This is the right
-choice when several people share one key and you want spend limits in one place.
+---
 
-## Pasting your way out of trouble
+## 3. Model advice (for tool calling, not chat)
 
-The base URL is normalised, so these are all the same endpoint:
+Tool calling is a separate skill from prose. Models that reliably emit valid
+arguments for a 55-tool registry, roughly from smallest to largest:
 
-```
-127.0.0.1:11434
-http://127.0.0.1:11434/
-http://127.0.0.1:11434/api/chat
-```
+| Model class | Notes |
+| --- | --- |
+| Qwen 2.5 7B Instruct / Qwen3 8B | The best small tool-callers in practice; run with `qwen`/`hermes` parsers. |
+| Llama 3.1 / 3.3 8B Instruct | Solid, occasionally drops a required field — the validator catches it. |
+| Mistral Small 3 / Magistral | Fast, good JSON hygiene. |
+| DeepSeek V3 / R1 distills | Strong planning; larger memory footprint. |
+| Phi-4 14B | Good reasoning, weaker at strict JSON. |
+| Gemma 3 12B | Fine for prose-heavy tools, weaker on nested arguments. |
 
-The endpoint is derived from the wire, not guessed:
+Rules of thumb:
 
-| wire | chat | models |
+- **Below ~7B**, tool calling gets flaky. The runtime recovers (the error is fed
+  back), but a run may hit the step budget. Start at 8 steps.
+- **Quantisation**: Q4_K_M is the usual sweet spot; Q2 breaks JSON formatting.
+- **Context**: 8k is enough for this registry (the schemas are compact); 16k is
+  comfortable for long note searches.
+
+---
+
+## 4. What actually leaves the machine
+
+| Setup | Data path | Cost |
 | --- | --- | --- |
-| ollama | `{base}/api/chat` | `{base}/api/tags` |
-| openai | `{base}/chat/completions` | `{base}/models` |
+| Local runtime (Ollama, vLLM, llama.cpp, LocalAI, LM Studio, TGW, TGI) | browser → `127.0.0.1` | electricity |
+| OpenRouter / Groq / Together / DeepSeek / Mistral / Fireworks / Cerebras / Novita | browser → provider | per token |
+| Offline | nothing leaves | free |
 
-## When "Test connection" fails
+The app never sends workspace data anywhere on its own. If you pick offline, no
+request is made at all — the grammar runs locally.
 
-The probe returns the real reason rather than a spinner:
+---
+
+## 5. Troubleshooting the probe
+
+The Providers tab probes `GET {base}/models` (OpenAI wire) or
+`GET {base}/api/tags` (Ollama wire) and reports the status code, latency and
+model list.
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| `TypeError: Failed to fetch` | CORS, port closed, or server not running | allow this origin; check the port |
-| `401` | missing or wrong key | paste the key, check the provider |
-| `404` on `/chat/completions` | base URL missing `/v1` | add it |
-| `200` but no models | server started without a model | pull/load a model |
-| reachable, but the console loops twice | model has no tool support | pick a tool-capable model, or use offline mode |
+| `Failed to fetch` with a local URL | server not running, or CORS blocked | start the runtime; allow the app origin (`OLLAMA_ORIGINS`, `--api-listen`, vLLM `--allowed-origins`) |
+| `401` / `403` | missing or wrong key | paste the key, save, probe again |
+| `404` on the endpoint | base URL has the wrong suffix | the app strips `/chat/completions` and a trailing `/`; type `http://127.0.0.1:8000/v1` |
+| `200` but no models | runtime has no models pulled | `ollama pull …` |
+| Mixed content blocked | app served over HTTPS, runtime on `http://127.0.0.1` | most browsers exempt loopback; otherwise run the app on `http://localhost` |
+| Tool calls arrive as plain text | model/parser not enabled | `--enable-auto-tool-choice`, `--jinja`, or choose a tool-trained model |
+| Calls work, results ignored | model does not read tool results | raise `maxSteps` once; if it persists, switch model |
 
-## Privacy and cost, stated plainly
+---
 
-- **Local model** — prompts, tool schemas and tool results never leave the
-  machine. Cost: electricity. Latency: your GPU.
-- **Hosted open weights** — the prompt, the tool catalogue and any tool results
-  the model asked to see are sent to that provider. Cost: per token.
-- **No FriendConnect proxy** — the browser talks to the endpoint directly, so
-  there is no server-side log of your model traffic to leak. The trade is that
-  each browser holds its own key.
+## 6. Adding a provider
 
-## Adding a provider
+The catalogue is data, not code paths. In `src/lib/agent/providers.ts`:
 
-1. Add an entry to `PROVIDERS` in `src/lib/agent/providers.ts` — `wire`,
-   `defaultBaseUrl`, `suggestedModels`, `requiresKey`.
-2. If it needs a CORS hint, add a line to `setupHint()`.
-3. Run `npm test -- tests/26-agent-providers.test.ts`.
+```ts
+{
+  id: "my-runtime",
+  name: "My runtime",
+  kind: "local",
+  openSource: true,
+  licence: "Apache-2.0",
+  homepage: "https://…",
+  docs: "https://…",
+  defaultBaseUrl: "http://127.0.0.1:9000/v1",
+  requiresKey: false,
+  wire: "openai",              // or "ollama"
+  suggestedModels: ["my-model"],
+}
+```
 
-It appears in Providers, in the manifest and in `/api/agent/manifest` with no
-further wiring.
+Add the id to the docs table, run `npm test` (the provider test iterates the
+catalogue and asserts URL normalisation and both parsers), and the Providers tab
+plus the manifest pick it up with no other change.
+
+---
+
+## 7. Keeping the slot open
+
+This is a standing requirement of the product: **the open-source provider slot
+stays open**. Nothing in the app assumes a hosted vendor, no model id is
+hard-coded into a tool, and adding a runtime never requires touching the
+registry. The offline grammar means the product is fully usable even if every
+provider is removed.

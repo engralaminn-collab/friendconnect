@@ -38,6 +38,7 @@ import {
   Network,
   Sparkles,
   BrainCircuit,
+  Timer,
 } from "lucide-react";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
@@ -47,7 +48,7 @@ import { Badge } from "@/components/ui/primitives";
 export const metadata: Metadata = {
   title: "Features",
   description:
-    "Ten pillars, forty-three modules: private messaging and calling, one AI operator that can drive all of them, revenue, education consultancy, AI marketing, creative studios, agents, knowledge systems, operational insight and the platform tooling that makes an AI coding agent productive.",
+    "Ten pillars, forty-four modules: private messaging and calling, one AI operator that can drive all of them, revenue, education consultancy, AI marketing, creative studios, agents, knowledge systems, operational insight and the platform tooling that makes an AI coding agent productive.",
 };
 
 interface Feature {
@@ -263,6 +264,20 @@ const pillars: { id: string; title: string; accent: string; lead: string; featur
           "Logged minutes compared against the plan",
           "Confidence rating to spot weak areas",
           "Weekly focus summary for students",
+        ],
+      },
+      {
+        icon: Timer,
+        name: "Exam room",
+        blurb:
+          "Sit the computer-based English test inside the product: timed sections, auto-marked reading and listening, band scoring and a review of every answer.",
+        points: [
+          "IELTS Academic, TOEFL iBT and a 15-minute placement paper",
+          "Section countdown that auto-advances, flags and a question palette",
+          "Reading and listening marked against the published band tables",
+          "Writing and speaking scored on 1–9 with word-count and cohesion checks",
+          "Attempt history with CEFR mapping, resume and per-question review",
+          "Bill Agent can start, mark and archive a paper without a human",
         ],
       },
       {
@@ -619,7 +634,7 @@ export default function FeaturesPage() {
         <div className="relative mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
           <Reveal className="mx-auto max-w-3xl text-center">
             <span className="chip border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-800 dark:bg-brand-950/60 dark:text-brand-300">
-              43 modules · 10 pillars
+              44 modules · 10 pillars
             </span>
             <h1 className="mt-5 text-4xl font-bold tracking-tight sm:text-5xl">
               Everything below ships in <GradientText>every plan</GradientText>

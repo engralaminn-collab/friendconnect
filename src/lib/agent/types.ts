@@ -42,6 +42,7 @@ import type {
   VoiceClip,
   WikiPage,
 } from "@/lib/types";
+import type { ExamAttempt } from "@/lib/exam";
 
 /* ------------------------------------------------------------------ */
 /* Tool contract                                                       */
@@ -178,6 +179,9 @@ export interface WorkspacePort {
   updateApplication: (id: string, patch: Partial<Application>) => void;
   toggleChecklist: (appId: string, itemId: string) => void;
   addStudySession: (session: Omit<StudySession, "id">) => void;
+  examAttempts: ExamAttempt[];
+  saveExamAttempt: (attempt: ExamAttempt) => void;
+  removeExamAttempt: (id: string) => void;
   addArticle: (
     article: Omit<Article, "id" | "createdAt" | "readTime" | "views" | "conversions">,
   ) => Article;
@@ -210,6 +214,11 @@ export interface WorkspacePort {
   updateGateway: (id: string, patch: Partial<GatewayConfig>) => void;
   saveMessageItem: (item: Omit<SavedMessage, "id" | "at">) => SavedMessage;
   reportMessage: (report: Omit<MessageReport, "id" | "at" | "status">) => void;
+  saveDiagram: (
+    diagram: Omit<Diagram, "id" | "updatedAt"> & { id?: string },
+  ) => Diagram;
+  removeDiagram: (id: string) => void;
+  togglePlugin: (id: string) => void;
   markAllNotificationsRead: () => void;
   markNotificationRead: (id: string) => void;
   setKidSafe: (on: boolean) => void;

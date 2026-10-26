@@ -65,7 +65,10 @@ export default function BillAgentPage() {
 
   React.useEffect(() => {
     const hash = window.location.hash.replace("#", "") as TabId;
-    if (TABS.some((item) => item.id === hash)) setTab(hash);
+    if (!TABS.some((item) => item.id === hash)) return;
+    // Deferred so the first paint matches the server-rendered "operate" tab.
+    const timer = window.setTimeout(() => setTab(hash), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const selectTab = (next: TabId) => {

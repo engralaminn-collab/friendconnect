@@ -10,7 +10,16 @@
    Tools never import the store; they receive a WorkspacePort.
    ============================================================ */
 
-import { slugify } from "@/lib/utils";
+import { slugify, uid } from "@/lib/utils";
+import { EXAM_PAPERS, getPaper } from "@/lib/data/exams";
+import {
+  emptyAttempt,
+  formatBand,
+  gradeAttempt,
+  objectiveCount,
+  paperMinutes,
+  type ExamAnswer,
+} from "@/lib/exam";
 import type {
   Contact,
   Deal,
@@ -1435,6 +1444,554 @@ const messagingTools: ToolDefinition[] = [
   }),
 ];
 
+
+/* ------------------------------------------------------------------ */
+/* Community, studios and operations                                   */
+/* ------------------------------------------------------------------ */
+
+const communityTools: ToolDefinition[] = [
+  writeTool({
+    name: "create_student",
+    title: "Create student",
+    group: "education",
+    description: "Add a student record to the education pipeline.",
+    schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Student name." },
+        email: { type: "string", description: "Email address." },
+        country: { type: "string", description: "Country of residence.", default: "Unknown" },
+        level: { type: "string", description: "Current study level.", default: "Undergraduate" },
+        status: {
+          type: "string",
+          description: "Pipeline status.",
+          enum: ["enquiry", "shortlisted", "applied", "offer", "visa", "enrolled", "lost"],
+          default: "enquiry",
+        },
+        budget: { type: "number", description: "Annual budget in GBP.", default: 0 },
+      },
+      required: ["name", "email"],
+      additionalProperties: false,
+    },
+    run: (ctx, args) => {
+      const email = String(args.email);
+      const duplicate = ctx.workspace.students.find((s) => norm(s.email) === norm(email));
+      if (duplicate) return fail(`${duplicate.name} already uses ${email}.`);
+      const student = ctx.workspace.addStudent({
+        name: String(args.name),
+        email,
+        country: String(args.country ?? "Unknown"),
+        level: String(args.level ?? "Undergraduate"),
+        status: (args.status as Student["status"]) ?? "enquiry",
+        budget: Number(args.budget ?? 0),
+      });
+      return { ok: true, summary: `Created student ${student.name} at ${student.status}.`, data: student };
+    },
+  }),
+  writeTool({
+    name: "create_post",
+    title: "Post to the community feed",
+    group: "operations",
+    description: "Publish a post to the community feed.",
+    schema: {
+      type: "object",
+      properties: {
+        body: { type: "string", description: "Post body." },
+        topic: { type: "string", description: "Topic label.", default: "General" },
+        tags: { type: "array", description: "Tags.", items: { type: "string" } },
+      },
+      required: ["body"],
+      additionalProperties: false,
+    },
+    run: (ctx, args) => {
+      const post = ctx.workspace.addPost({
+        author: "Bill Agent",
+        authorRole: "Workspace operator",
+        avatarHue: 24,
+        body: String(args.body),
+        topic: String(args.topic ?? "General"),
+        tags: Array.isArray(args.tags) ? (args.tags as string[]) : [],
+      });
+      return { ok: true, summary: `Posted to the feed under ${post.topic}.`, data: post };
+    },
+  }),
+  writeTool({
+    name: "create_event",
+    title: "Create event",
+    group: "operations",
+    description: "Add a webinar, deadline, meeting, launch or community event to the calendar.",
+    schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Event title." },
+        type: {
+          type: "string",
+          description: "Event type.",
+          enum: ["webinar", "deadline", "meeting", "launch", "community"],
+          default: "meeting",
+        },
+        date: { type: "string", description: "ISO date. Defaults to seven days from now." },
+        time: { type: "string", description: "Local time, e.g. 14:00." },
+        description: { type: "string", description: "Description." },
+        attendees: { type: "number", description: "Expected attendees.", default: 0 },
+        location: { type: "string", description: "Location or meeting link." },
+      },
+      required: ["title"],
+      additionalProperties: false,
+    },
+    run: (ctx, args) => {
+      const event = ctx.workspace.addEvent({
+        title: String(args.title),
+        type: (args.type as "webinar" | "deadline" | "meeting" | "launch" | "community") ?? "meeting",
+        date: String(args.date ?? day(ctx, 7)),
+        time: args.time ? String(args.time) : undefined,
+        description: String(args.description ?? ""),
+        attendees: Number(args.attendees ?? 0),
+        location: args.location ? String(args.location) : undefined,
+      });
+      return { ok: true, summary: `Created ${event.type} “${event.title}”.`, data: event };
+    },
+  }),
+  writeTool({
+    name: "log_call",
+    title: "Log a call",
+    group: "messaging",
+    description: "Record a completed or missed audio/video call in the call history.",
+    schema: {
+      type: "object",
+      properties: {
+        contactName: { type: "string", description: "Who the call was with." },
+        direction: { type: "string", description: "Direction.", enum: ["incoming", "outgoing", "missed"] },
+        kind: { type: "string", description: "Media kind.", enum: ["audio", "video"], default: "audio" },
+        durationSec: { type: "number", description: "Duration in seconds.", default: 0 },
+        status: {
+          type: "string",
+          description: "Outcome.",
+          enum: ["completed", "missed", "declined", "failed"],
+          default: "completed",
+        },
+        mos: { type: "number", description: "Mean opinion score 1-5 (default 4.2).", default: 4.2 },
+        recording: { type: "boolean", description: "Was the call recorded?", default: false },
+      },
+      required: ["contactName", "direction"],
+      additionalProperties: false,
+    },
+    run: (ctx, args) => {
+      const durationSec = Number(args.durationSec ?? 0);
+      const mos = Math.max(1, Math.min(5, Number(args.mos ?? 4.2)));
+      const call = ctx.workspace.addCall({
+        contactName: String(args.contactName),
+        direction: args.direction as "incoming" | "outgoing" | "missed",
+        kind: (args.kind as "audio" | "video") ?? "audio",
+        startedAt: iso(ctx),
+        durationSec,
+        status: (args.status as "completed" | "missed" | "declined" | "failed") ?? "completed",
+        quality: {
+          rttMs: Math.round((5 - mos) * 60),
+          jitterMs: Math.round((5 - mos) * 8),
+          lossPct: Number(((5 - mos) * 0.6).toFixed(2)),
+          bitrateKbps: durationSec > 0 ? 640 : 0,
+          mos,
+          codec: "opus/48kHz",
+        },
+        recording: Boolean(args.recording ?? false),
+      });
+      return {
+        ok: true,
+        summary: `Logged ${call.direction} ${call.kind} call with ${call.contactName} (${call.durationSec}s, MOS ${mos}).`,
+        data: call,
+      };
+    },
+  }),
+  writeTool({
+    name: "update_gateway",
+    title: "Update gateway",
+    group: "operations",
+    description: "Connect, disconnect or re-point a gateway (HTTP SMS, Domovina, ComfyUI, SIP, webhook).",
+    schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Gateway name or id." },
+        connected: { type: "boolean", description: "Force the connection state; omit to toggle." },
+        baseUrl: { type: "string", description: "New base URL." },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    run: (ctx, args) => {
+      const gateway =
+        ctx.workspace.gateways.find((g) => g.id === args.query) ??
+        ctx.workspace.gateways.find((g) => matches([g.name, g.provider], String(args.query)));
+      if (!gateway) {
+        return fail(
+          `No gateway matched. Available: ${ctx.workspace.gateways.map((g) => g.name).join(" · ")}.`,
+        );
+      }
+      const patch: Record<string, unknown> = {};
+      if (args.baseUrl !== undefined) patch.baseUrl = String(args.baseUrl);
+      if (Object.keys(patch).length > 0) {
+        ctx.workspace.updateGateway(gateway.id, patch as never);
+      }
+      const desired =
+        args.connected === undefined ? !gateway.connected : Boolean(args.connected);
+      if (desired !== gateway.connected) ctx.workspace.toggleGateway(gateway.id);
+      return {
+        ok: true,
+        summary: `${gateway.name} is now ${desired ? "connected" : "disconnected"}${
+          args.baseUrl ? ` at ${String(args.baseUrl)}` : ""
+        }.`,
+        data: { id: gateway.id, connected: desired },
+      };
+    },
+  }),
+  writeTool({
+    name: "toggle_plugin",
+    title: "Enable or disable a plugin",
+    group: "knowledge",
+    description: "Install or remove a workspace plugin.",
+    schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Plugin name or slug." },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    run: (ctx, args) => {
+      const plugin =
+        ctx.workspace.plugins.find((p) => p.id === args.query) ??
+        ctx.workspace.plugins.find((p) => matches([p.name, p.slug], String(args.query)));
+      if (!plugin) {
+        return fail(`No plugin matched. Available: ${ctx.workspace.plugins.map((p) => p.name).join(" · ")}.`);
+      }
+      ctx.workspace.togglePlugin(plugin.id);
+      return {
+        ok: true,
+        summary: `${plugin.name} ${plugin.installed ? "disabled" : "enabled"}.`,
+        data: { id: plugin.id, installed: !plugin.installed },
+      };
+    },
+  }),
+  writeTool({
+    name: "pin_note",
+    title: "Pin or unpin a note",
+    group: "knowledge",
+    description: "Pin a note to the top of the notes list.",
+    schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Note title fragment." },
+        pinned: { type: "boolean", description: "Force the value; omit to toggle." },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    run: (ctx, args) => {
+      const note = ctx.workspace.notes.find((n) => matches([n.title], String(args.query)));
+      if (!note) return fail(`No note matched “${String(args.query)}”.`);
+      const desired = args.pinned === undefined ? !note.pinned : Boolean(args.pinned);
+      if (desired !== note.pinned) ctx.workspace.toggleNotePin(note.id);
+      return { ok: true, summary: `“${note.title}” ${desired ? "pinned" : "unpinned"}.`, data: { id: note.id } };
+    },
+  }),
+  writeTool({
+    name: "update_wiki_page",
+    title: "Update wiki page",
+    group: "knowledge",
+    description: "Rewrite the summary, body or category of an existing wiki page.",
+    schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Page title or slug." },
+        summary: { type: "string", description: "New one-line summary." },
+        body: { type: "string", description: "New markdown body." },
+        category: { type: "string", description: "New category." },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    run: (ctx, args) => {
+      const page =
+        ctx.workspace.wikiPages.find((p) => p.id === args.query) ??
+        ctx.workspace.wikiPages.find((p) => matches([p.title, p.slug], String(args.query)));
+      if (!page) return fail(`No wiki page matched “${String(args.query)}”.`);
+      const patch: Record<string, unknown> = {};
+      if (args.summary !== undefined) patch.summary = String(args.summary);
+      if (args.body !== undefined) patch.body = String(args.body);
+      if (args.category !== undefined) patch.category = String(args.category);
+      if (Object.keys(patch).length === 0) return fail("Provide summary, body or category.");
+      ctx.workspace.updateWikiPage(page.id, patch as never);
+      return { ok: true, summary: `Updated wiki page “${page.title}”.`, data: { id: page.id } };
+    },
+  }),
+  writeTool({
+    name: "save_diagram",
+    title: "Save diagram",
+    group: "studios",
+    description:
+      "Create a flow diagram from a list of step labels. Nodes are laid out left to right with start and end caps.",
+    schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Diagram name." },
+        description: { type: "string", description: "What the flow describes." },
+        steps: { type: "array", description: "Ordered step labels.", items: { type: "string" } },
+        template: { type: "string", description: "Template label.", default: "custom" },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+    run: (ctx, args) => {
+      const labels = Array.isArray(args.steps) ? (args.steps as string[]).slice(0, 12) : [];
+      if (labels.length === 0) return fail("Provide at least one step label.");
+      const all = ["Start", ...labels, "End"];
+      const nodes = all.map((label, index) => ({
+        id: `n${index + 1}`,
+        type: (index === 0 ? "start" : index === all.length - 1 ? "end" : "process") as
+          | "start"
+          | "end"
+          | "process",
+        label,
+        x: 40 + index * 190,
+        y: 120,
+        w: 150,
+        h: 64,
+        color: index === 0 ? "#10B981" : index === all.length - 1 ? "#2563EB" : "#F97316",
+      }));
+      const edges = nodes.slice(0, -1).map((node, index) => ({
+        id: `e${index + 1}`,
+        from: node.id,
+        to: nodes[index + 1].id,
+        label: undefined,
+        dashed: false,
+      }));
+      const diagram = ctx.workspace.saveDiagram({
+        name: String(args.name),
+        description: String(args.description ?? `Generated by Bill Agent from ${labels.length} step(s).`),
+        nodes,
+        edges,
+        template: String(args.template ?? "custom"),
+      });
+      return {
+        ok: true,
+        summary: `Saved diagram “${diagram.name}” with ${nodes.length} nodes and ${edges.length} edges.`,
+        data: diagram,
+      };
+    },
+  }),
+  writeTool({
+    name: "set_kid_safe",
+    title: "Set kid-safe mode",
+    group: "operations",
+    description: "Turn the messenger's kid-safe mode on or off.",
+    schema: {
+      type: "object",
+      properties: {
+        on: { type: "boolean", description: "True to enable, false to disable." },
+      },
+      required: ["on"],
+      additionalProperties: false,
+    },
+    run: (ctx, args) => {
+      const on = Boolean(args.on);
+      ctx.workspace.setKidSafe(on);
+      return { ok: true, summary: `Kid-safe mode ${on ? "enabled" : "disabled"}.`, data: { kidSafe: on } };
+    },
+  }),
+  readTool({
+    name: "mark_notifications_read",
+    title: "Mark notifications read",
+    group: "operations",
+    description: "Clear the unread notification badge by marking every notification read.",
+    schema: { type: "object", properties: {}, required: [], additionalProperties: false },
+    run: (ctx) => {
+      const unread = ctx.workspace.notifications.filter((n) => !n.read).length;
+      if (unread > 0) ctx.workspace.markAllNotificationsRead();
+      return {
+        ok: true,
+        summary: unread === 0 ? "No unread notifications." : `Marked ${unread} notification(s) read.`,
+        data: { cleared: unread },
+      };
+    },
+  }),
+];
+
+
+/* ------------------------------------------------------------------ */
+/* Computer-based English tests                                        */
+/* ------------------------------------------------------------------ */
+
+const examTools: ToolDefinition[] = [
+  readTool({
+    name: "list_exam_papers",
+    title: "List exam papers",
+    group: "education",
+    description:
+      "Show the computer-based English test papers available, with section counts, time and how many questions are auto-marked.",
+    schema: { type: "object", properties: {}, required: [], additionalProperties: false },
+    run: () => ({
+      ok: true,
+      summary: `${EXAM_PAPERS.length} papers available.`,
+      data: EXAM_PAPERS.map((paper) => ({
+        id: paper.id,
+        title: paper.title,
+        level: paper.level,
+        scale: paper.scale,
+        minutes: paperMinutes(paper),
+        sections: paper.sections.map((section) => ({
+          id: section.id,
+          skill: section.skill,
+          title: section.title,
+          minutes: section.minutes,
+          questions: section.questions.length,
+        })),
+        markedQuestions: objectiveCount(paper),
+      })),
+    }),
+  }),
+  writeTool({
+    name: "start_exam_attempt",
+    title: "Start an exam attempt",
+    group: "education",
+    description:
+      "Create a timed attempt for a paper and save it as a draft. Use this when a learner is about to sit a paper in the Exam room.",
+    schema: {
+      type: "object",
+      properties: {
+        paperId: {
+          type: "string",
+          description: `Paper id from list_exam_papers: ${EXAM_PAPERS.map((paper) => paper.id).join(", ")}.`,
+        },
+      },
+      required: ["paperId"],
+      additionalProperties: false,
+    },
+    run: (ctx, args) => {
+      const paper = getPaper(String(args.paperId));
+      if (!paper) return fail(`No paper with id “${String(args.paperId)}”.`);
+      const attempt = emptyAttempt(paper.id, uid("exam"));
+      ctx.workspace.saveExamAttempt(attempt);
+      return {
+        ok: true,
+        summary: `Started “${paper.title}” — ${paperMinutes(paper)} minutes across ${paper.sections.length} sections.`,
+        data: attempt,
+      };
+    },
+  }),
+  writeTool({
+    name: "grade_exam_attempt",
+    title: "Grade an exam attempt",
+    group: "education",
+    description:
+      "Mark a set of answers against a paper, blend the productive self-assessment and store the band-scored result. Answers map question ids to {selected:[optionIds]} or {text}. selfAssessed maps writing/speaking to a 1–9 score.",
+    schema: {
+      type: "object",
+      properties: {
+        paperId: {
+          type: "string",
+          description: `Paper id from list_exam_papers: ${EXAM_PAPERS.map((paper) => paper.id).join(", ")}.`,
+        },
+        answers: {
+          type: "object",
+          description: "Question id → { selected: [optionId], text: string }.",
+        },
+        selfAssessed: {
+          type: "object",
+          description: "Optional writing/speaking self score, e.g. { writing: 7, speaking: 6.5 }.",
+        },
+      },
+      required: ["paperId", "answers"],
+      additionalProperties: false,
+    },
+    run: (ctx, args) => {
+      const paper = getPaper(String(args.paperId));
+      if (!paper) return fail(`No paper with id “${String(args.paperId)}”.`);
+      const rawAnswers = (args.answers ?? {}) as Record<string, ExamAnswer>;
+      const questionIds = new Set(
+        paper.sections.flatMap((section) => section.questions.map((question) => question.id)),
+      );
+      const unknown = Object.keys(rawAnswers).filter((id) => !questionIds.has(id));
+      const self = (args.selfAssessed ?? {}) as Record<string, number>;
+
+      const attempt = {
+        ...emptyAttempt(paper.id, uid("exam")),
+        status: "submitted" as const,
+        answers: rawAnswers,
+        selfAssessed: Object.fromEntries(
+          Object.entries(self)
+            .filter(([key]) => key === "writing" || key === "speaking")
+            .map(([key, value]) => [key, Math.max(1, Math.min(9, Number(value)))]),
+        ),
+      };
+      const result = gradeAttempt(paper, attempt);
+      const stored = { ...attempt, submittedAt: result.finishedAt, result };
+      ctx.workspace.saveExamAttempt(stored);
+
+      const sections = result.sections
+        .map((section) =>
+          section.max > 0
+            ? `${section.title} ${section.raw}/${section.max}`
+            : `${section.title} self ${formatBand(section.band)}`,
+        )
+        .join(" · ");
+      return {
+        ok: true,
+        summary: `Graded “${paper.title}”: ${sections}. Overall ${
+          paper.scale === "toefl" ? `${result.toeflTotal}/120` : `band ${formatBand(result.finalBand)}`
+        } (${result.cefr}).${unknown.length ? ` Ignored unknown ids: ${unknown.join(", ")}.` : ""}`,
+        data: stored,
+      };
+    },
+  }),
+  readTool({
+    name: "list_exam_attempts",
+    title: "List exam attempts",
+    group: "education",
+    description: "Show saved exam attempts with status, band, CEFR level and time spent.",
+    schema: { type: "object", properties: {}, required: [], additionalProperties: false },
+    run: (ctx) => {
+      const attempts = ctx.workspace.examAttempts;
+      if (attempts.length === 0) return { ok: true, summary: "No exam attempts yet.", data: [] };
+      return {
+        ok: true,
+        summary: `${attempts.length} attempt(s); best band ${
+          formatBand(Math.max(...attempts.map((item) => item.result?.finalBand ?? 0)))
+        }.`,
+        data: attempts.map((item) => ({
+          id: item.id,
+          paperId: item.paperId,
+          status: item.status,
+          startedAt: item.startedAt,
+          band: item.result?.finalBand ?? null,
+          cefr: item.result?.cefr ?? null,
+          minutes: Math.round(item.timeSpentSec / 60),
+        })),
+      };
+    },
+  }),
+  writeTool({
+    name: "delete_exam_attempt",
+    title: "Delete an exam attempt",
+    group: "education",
+    description: "Permanently remove a saved attempt from the history.",
+    schema: {
+      type: "object",
+      properties: {
+        attemptId: { type: "string", description: "Attempt id from list_exam_attempts." },
+      },
+      required: ["attemptId"],
+      additionalProperties: false,
+    },
+    run: (ctx, args) => {
+      const id = String(args.attemptId);
+      const attempt = ctx.workspace.examAttempts.find((item) => item.id === id);
+      if (!attempt) return fail(`No attempt with id “${id}”.`);
+      ctx.workspace.removeExamAttempt(id);
+      return { ok: true, summary: `Deleted attempt ${id}.`, data: { id } };
+    },
+  }),
+];
+
 /* ------------------------------------------------------------------ */
 /* Registry                                                            */
 /* ------------------------------------------------------------------ */
@@ -1445,6 +2002,8 @@ export const TOOLS: ToolDefinition[] = [
   ...marketingTools,
   ...knowledgeTools,
   ...messagingTools,
+  ...communityTools,
+  ...examTools,
 ];
 
 export const TOOL_GROUPS: Array<{ id: ToolDefinition["group"]; label: string }> = [
@@ -1453,7 +2012,8 @@ export const TOOL_GROUPS: Array<{ id: ToolDefinition["group"]; label: string }> 
   { id: "marketing", label: "AI marketing" },
   { id: "knowledge", label: "Knowledge" },
   { id: "messaging", label: "Messaging" },
-  { id: "operations", label: "Operations" },
+  { id: "studios", label: "Studios" },
+  { id: "operations", label: "Community & operations" },
 ];
 
 export function getTool(name: string): ToolDefinition | undefined {

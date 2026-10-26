@@ -45,6 +45,7 @@ import type {
   VoiceClip,
   WikiPage,
 } from "@/lib/types";
+import type { ExamAttempt } from "@/lib/exam";
 import { uid } from "@/lib/utils";
 import { seedImageJobs } from "@/lib/data/images";
 import {
@@ -102,6 +103,7 @@ export interface AppState {
   students: Student[];
   applications: Application[];
   studySessions: StudySession[];
+  examAttempts: ExamAttempt[];
   /* ---------- Marketing ---------- */
   articles: Article[];
   campaigns: Campaign[];
@@ -166,6 +168,8 @@ export interface AppState {
   toggleChecklist: (appId: ID, itemId: ID) => void;
   addStudySession: (session: Omit<StudySession, "id">) => void;
   updateStudySession: (id: ID, patch: Partial<StudySession>) => void;
+  saveExamAttempt: (attempt: ExamAttempt) => void;
+  removeExamAttempt: (id: ID) => void;
 
   /* ---------- Actions: Marketing ---------- */
   addArticle: (article: Omit<Article, "id" | "createdAt" | "readTime" | "views" | "conversions">) => Article;
@@ -251,6 +255,7 @@ const initialState = {
   students: seedStudents,
   applications: seedApplications,
   studySessions: seedStudySessions,
+  examAttempts: [],
   articles: seedArticles,
   campaigns: seedCampaigns,
   socialPosts: seedSocialPosts,
@@ -437,6 +442,17 @@ export const useStore = create<AppState>()(
         set((s) => ({
           studySessions: s.studySessions.map((x) => (x.id === id ? { ...x, ...patch } : x)),
         })),
+      saveExamAttempt: (attempt) =>
+        set((s) => {
+          const exists = s.examAttempts.some((item) => item.id === attempt.id);
+          return {
+            examAttempts: exists
+              ? s.examAttempts.map((item) => (item.id === attempt.id ? attempt : item))
+              : [attempt, ...s.examAttempts].slice(0, 40),
+          };
+        }),
+      removeExamAttempt: (id) =>
+        set((s) => ({ examAttempts: s.examAttempts.filter((item) => item.id !== id) })),
 
       /* ---------------- Marketing ---------------- */
       addArticle: (article) => {
