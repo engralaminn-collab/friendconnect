@@ -301,10 +301,11 @@ in-app preview renders the complete product with no network access.
 - `npx tsc --noEmit` — clean, strict mode
 - `npx eslint .` — 0 errors
 - `npm run build` — every route generated, including the seven Bill Agent tabs
-- `npm test` — 128 passed, 29 skipped. The skips are the HTTP suites that need a
-  live server and database. The 57 Bill Agent tests cover the registry contract,
+- `npm test` — 130 passed, 29 skipped. The skips are the HTTP suites that need a
+  live server and database. The 59 Bill Agent tests cover the registry contract,
   argument validation, the run loop's four stop conditions, every write tool
-  against an in-memory workspace, both provider wires and the offline grammar
+  against both an in-memory workspace and the real store, both provider wires and
+the offline grammar
 - Production server: `/app/bill-agent`, `/app`, `/app/messenger`, `/legal/*`,
   `/api/agent/manifest` and `/api/agent/commands` all answer 200; the queue
   accepts, lists and settles a command end to end

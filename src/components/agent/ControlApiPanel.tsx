@@ -44,7 +44,10 @@ export function ControlApiPanel({ remote }: { remote: RemoteQueueState }) {
   >([]);
   const [loadingQueue, setLoadingQueue] = React.useState(false);
 
-  const origin = typeof window === "undefined" ? "https://panel.alolabs.net" : window.location.origin;
+  // Resolved after mount so the server-rendered markup and the first client
+  // render agree (the SSR origin is not the browser's origin).
+  const [origin, setOrigin] = React.useState("https://panel.alolabs.net");
+  React.useEffect(() => setOrigin(window.location.origin), []);
 
   const refresh = async () => {
     setLoadingQueue(true);
