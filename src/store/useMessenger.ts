@@ -412,6 +412,18 @@ export const useMessenger = create<MessengerState>()((set, get) => {
           options: media.poll.options.map((o) => o.label),
         };
       }
+      if (media?.kind === "location" && typeof media.lat === "number" && typeof media.lng === "number") {
+        payload.kind = "location";
+        payload.location = { lat: media.lat, lng: media.lng, address: media.address };
+      }
+      if (media?.kind === "contact" && media.contactCard) {
+        payload.kind = "contact";
+        payload.contactCard = {
+          name: media.contactCard.name,
+          phone: media.contactCard.phone,
+          company: media.contactCard.company,
+        };
+      }
 
       conversationsApi
         .send(threadId, payload)

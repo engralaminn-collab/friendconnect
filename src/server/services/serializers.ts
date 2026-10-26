@@ -61,6 +61,8 @@ export interface MessageDto {
   deleted: boolean;
   systemKind: string | null;
   createdAt: string;
+  /** Structured payload for location/contact-card messages, otherwise null. */
+  metadata: { location?: unknown; contactCard?: unknown } | null;
   attachments: AttachmentDto[];
   reactions: ReactionDto[];
   poll: PollDto | null;
@@ -141,6 +143,7 @@ export function baseMessageDto(row: MessageRow): Omit<
     deleted: Boolean(row.deletedAt),
     systemKind: row.systemKind,
     createdAt: row.createdAt.toISOString(),
+    metadata: (row.metadata as MessageDto["metadata"]) ?? null,
   };
 }
 

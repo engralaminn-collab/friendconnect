@@ -138,9 +138,21 @@ export async function sendMessage(
       return hydrated[0];
     }
   }
-  if (!input.body && (!input.mediaIds?.length) && !input.poll && input.kind === "text") {
-    throw conflict("Message must contain text, media or a poll.");
+  if (
+    !input.body &&
+    (!input.mediaIds?.length) &&
+    !input.poll &&
+    !input.location &&
+    !input.contactCard &&
+    input.kind === "text"
+  ) {
+    throw conflict("Message must contain text, media, a poll, a location or a contact card.");
   }
+  const metadata = input.location
+    ? { location: input.location }
+    : input.contactCard
+      ? { contactCard: input.contactCard }
+      : null;
   if (input.replyToId) {
     const parent = await db
       .select({ id: messages.id, conversationId: messages.conversationId })
@@ -178,11 +190,18 @@ export async function sendMessage(
       id: messageId,
       conversationId,
       senderId: userId,
-      kind: input.poll ? "poll" : input.kind,
+      kind: input.poll
+        ? "poll"
+        : input.location
+          ? "location"
+          : input.contactCard
+            ? "contact"
+            : input.kind,
       body: input.body,
       replyToId: input.replyToId ?? null,
       clientNonce: input.clientNonce ?? null,
       systemKind: null,
+      metadata,
       createdAt: now,
     });
     for (const [i, m] of mediaRows.entries()) {

@@ -28,6 +28,32 @@ function attachmentToMedia(dto: MessageDto["attachments"][number]): MediaAttachm
   } as MediaAttachment;
 }
 
+function metadataToMedia(dto: MessageDto): MediaAttachment | undefined {
+  const loc = dto.metadata?.location;
+  if (loc) {
+    return {
+      kind: "location",
+      name: loc.address ?? `${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}`,
+      sizeLabel: `${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}`,
+      mime: "text/location",
+      lat: loc.lat,
+      lng: loc.lng,
+      address: loc.address,
+    } as MediaAttachment;
+  }
+  const card = dto.metadata?.contactCard;
+  if (card) {
+    return {
+      kind: "contact",
+      name: card.name,
+      sizeLabel: "vCard",
+      mime: "text/vcard",
+      contactCard: { name: card.name, phone: card.phone, company: card.company },
+    } as MediaAttachment;
+  }
+  return undefined;
+}
+
 function pollToMedia(dto: MessageDto): MediaAttachment | undefined {
   if (!dto.poll) return undefined;
   const media = {
@@ -51,6 +77,7 @@ export function messageToLegacy(dto: MessageDto, currentUserId: string): Message
   const mine = dto.senderId === currentUserId;
   const attachment = dto.attachments[0] ? attachmentToMedia(dto.attachments[0]) : undefined;
   const poll = pollToMedia(dto);
+  const structured = metadataToMedia(dto);
   const status: Message["status"] = mine
     ? dto.receiptSummary.readBy.length > 0
       ? "read"
@@ -65,7 +92,7 @@ export function messageToLegacy(dto: MessageDto, currentUserId: string): Message
     at: dto.createdAt,
     status,
     kind: dto.deleted ? "system" : (dto.kind as Message["kind"]),
-    media: attachment ?? poll,
+    media: attachment ?? poll ?? structured,
     replyTo: dto.replyToId ?? undefined,
     reactions: dto.reactions.map((r) => ({ emoji: r.emoji, count: r.count, mine: r.mine })),
     edited: dto.edited,
@@ -89,6 +116,7 @@ export function conversationToThread(
   return {
     id: dto.id,
     channel: "voip",
+    type: dto.type === "group" ? "group" : "direct",
     contactName: dto.title ?? peer?.displayName ?? "Conversation",
     contactId: peer?.userId,
     // Full messages are hydrated separately; lastMessage keeps the list preview alive.

@@ -15,15 +15,22 @@ interface Ring {
   kind: "audio" | "video";
 }
 
+export interface AcceptedCall {
+  engine: RemoteCallEngine;
+  kind: "audio" | "video";
+  conversationId: string;
+  contactName: string;
+}
+
 /**
  * Listens for authenticated call:incoming events and lets the user accept or
- * decline a real cross-device call. Accepting mounts the shared CallOverlay
- * through the page-supplied callback.
+ * decline a real cross-device call. Accepting hands a RemoteCallEngine to the
+ * globally-mounted call layer.
  */
 export function IncomingCallDialog({
   onAccept,
 }: {
-  onAccept: (engine: RemoteCallEngine, kind: "audio" | "video") => void;
+  onAccept: (call: AcceptedCall) => void;
 }) {
   const [ring, setRing] = React.useState<Ring | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -49,7 +56,12 @@ export function IncomingCallDialog({
     setBusy(true);
     try {
       const engine = new RemoteCallEngine(getCallManager());
-      onAccept(engine, ring.kind);
+      onAccept({
+        engine,
+        kind: ring.kind,
+        conversationId: ring.conversationId,
+        contactName: callerName,
+      });
       await engine.accept(ring.callId, ring.peerId, ring.kind);
       setRing(null);
     } catch (err) {
@@ -75,9 +87,7 @@ export function IncomingCallDialog({
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[15px] font-semibold">{callerName}</p>
-          <p className="text-[12px] text-white/55">
-            Incoming {ring.kind} call · ringing…
-          </p>
+          <p className="text-[12px] text-white/55">Incoming {ring.kind} call · ringing…</p>
         </div>
       </div>
       <div className="mt-4 flex gap-3">

@@ -7,6 +7,7 @@ import { ApiClientError } from "@/lib/api/client";
 import type { PublicUser } from "@/lib/api/types";
 import { getSocket, disconnectSocket, onConnectionChange } from "@/lib/realtime/socket";
 import { runLocalMigration } from "@/lib/api/local-migration";
+import { GlobalCallLayer } from "@/components/messaging/GlobalCallLayer";
 
 interface AuthContextValue {
   user: PublicUser | null;
@@ -84,7 +85,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user, loading, login, register, logout, refresh, realtimeConnected],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      {user && <GlobalCallLayer />}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth(): AuthContextValue {

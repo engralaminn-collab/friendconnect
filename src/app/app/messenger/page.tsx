@@ -40,8 +40,9 @@ import { PageHeader, StatCard } from "@/components/app/PageHeader";
 import { Modal } from "@/components/ui/Modal";
 import { Avatar, Badge, EmptyState, Progress } from "@/components/ui/primitives";
 import { ChatBubble, TypingIndicator } from "@/components/messaging/ChatBubble";
-import { CallOverlay } from "@/components/messaging/CallOverlay";
 import { MediaViewer } from "@/components/messaging/MediaViewer";
+import { LocationShareDialog, type SharedLocation } from "@/components/messaging/LocationShareDialog";
+import { ContactShareDialog } from "@/components/messaging/ContactShareDialog";
 import {
   SmartReplies,
   StickerKeyboard,
@@ -62,7 +63,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useToast } from "@/store/useUI";
 import { cn, copyToClipboard, downloadFile, formatDuration, relativeTime } from "@/lib/utils";
 import { RemoteCallEngine } from "@/lib/webrtc/remote-engine";
-import { IncomingCallDialog } from "@/components/messaging/IncomingCallDialog";
+import { useCallUI } from "@/store/useCallUI";
 import { mediaApi, profileApi } from "@/lib/api/resources";
 import { VoiceRecorder } from "@/lib/media/voice-recorder";
 import { humanize } from "@/lib/humanizer";
@@ -98,7 +99,6 @@ export default function MessengerPage() {
   const toggleThreadMute = useStore((s) => s.toggleThreadMute);
   const setThreadTyping = useStore((s) => s.setThreadTyping);
   const markThreadRead = useStore((s) => s.markThreadRead);
-  const addCall = useStore((s) => s.addCall);
   const safety = useStore((s) => s.safety);
   const setKidSafe = useStore((s) => s.setKidSafe);
   const updateSafety = useStore((s) => s.updateSafety);
@@ -144,10 +144,8 @@ export default function MessengerPage() {
   const [messageQuery, setMessageQuery] = React.useState("");
   const [recording, setRecording] = React.useState(false);
   const [recordSec, setRecordSec] = React.useState(0);
-  const [callState, setCallState] = React.useState<{
-    engine: RemoteCallEngine;
-    kind: "audio" | "video";
-  } | null>(null);
+  const [locationOpen, setLocationOpen] = React.useState(false);
+  const [contactOpen, setContactOpen] = React.useState(false);
   const [aiOpen, setAiOpen] = React.useState(false);
   const [aiText, setAiText] = React.useState("");
   const [aiPasses, setAiPasses] = React.useState<
@@ -183,7 +181,6 @@ export default function MessengerPage() {
     null,
   );
 
-  const engineRef = React.useRef<RemoteCallEngine | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
   const recordTimer = React.useRef<number>(0);
@@ -415,39 +412,31 @@ export default function MessengerPage() {
       toast.error("Call unavailable", "This conversation has no reachable participant.");
       return;
     }
+    if (active.type === "group") {
+      // Honest limitation: multi-party SFU (LiveKit) is not provisioned.
+      toast.error(
+        "Group calls aren't available yet",
+        "Group calling needs an SFU such as LiveKit. Use audio or video calls in direct conversations.",
+      );
+      return;
+    }
     const engine = new RemoteCallEngine();
-    engineRef.current = engine;
-    setCallState({ engine, kind });
+    useCallUI.getState().start({
+      engine,
+      kind,
+      contactName: active.contactName,
+      contactHue: active.avatarHue ?? 226,
+      conversationId: active.id,
+      contactId: active.contactId,
+      direction: "outgoing",
+    });
     engine.start(active.id, active.contactId, kind).catch((err: unknown) => {
       toast.error(
         "Call failed",
         err instanceof Error ? err.message : "Could not start the call.",
       );
-      engineRef.current = null;
-      setCallState(null);
+      useCallUI.getState().close();
     });
-  };
-
-  const endCall = (seconds: number) => {
-    if (!active) return;
-    const measured = engineRef.current?.current.quality;
-    const hasMetrics = measured && measured.packetsSent + measured.packetsReceived > 0;
-    addCall({
-      contactName: active.contactName,
-      contactId: active.contactId,
-      direction: "outgoing",
-      kind: callState?.kind ?? "audio",
-      startedAt: new Date(Date.now() - seconds * 1000).toISOString(),
-      durationSec: seconds,
-      status: "completed",
-      recording: false,
-      // Zero values when no peer media flowed — never fabricated metrics.
-      quality: hasMetrics
-        ? measured!
-        : { rttMs: 0, jitterMs: 0, lossPct: 0, bitrateKbps: 0, mos: 0, codec: "—" },
-    });
-    engineRef.current = null;
-    setCallState(null);
   };
 
   const generateAiReply = () => {
@@ -1158,17 +1147,10 @@ export default function MessengerPage() {
                       </button>
                     ))}
                     <button
-                      onClick={() =>
-                        sendMedia({
-                          kind: "location",
-                          name: "Northwind Consulting",
-                          sizeLabel: "51.5074, -0.1278",
-                          mime: "text/location",
-                          lat: 51.5074,
-                          lng: -0.1278,
-                          address: "42 Rivington Street, Shoreditch, London EC2A",
-                        })
-                      }
+                      onClick={() => {
+                        setShowAttach(false);
+                        setLocationOpen(true);
+                      }}
                       className="flex flex-col items-center gap-1.5 rounded-lg px-2 py-2.5 transition-colors hover:bg-[var(--fc-surface-3)]"
                     >
                       <MapPin className="size-4.5 text-emerald-500" />
@@ -1185,19 +1167,10 @@ export default function MessengerPage() {
                       <span className="text-[11px] font-semibold">Poll</span>
                     </button>
                     <button
-                      onClick={() =>
-                        sendMedia({
-                          kind: "contact",
-                          name: "contact-card",
-                          sizeLabel: "vCard",
-                          mime: "text/vcard",
-                          contactCard: {
-                            name: "Maya Rahman",
-                            phone: "+44 7700 900000",
-                            company: "Northwind Consulting",
-                          },
-                        })
-                      }
+                      onClick={() => {
+                        setShowAttach(false);
+                        setContactOpen(true);
+                      }}
                       className="flex flex-col items-center gap-1.5 rounded-lg px-2 py-2.5 transition-colors hover:bg-[var(--fc-surface-3)]"
                     >
                       <UserPlus className="size-4.5 text-violet-500" />
@@ -1456,22 +1429,37 @@ export default function MessengerPage() {
         />
       )}
 
-      {/* ---------------- Incoming / active calls ---------------- */}
-      <IncomingCallDialog
-        onAccept={(engine, kind) => {
-          engineRef.current = engine;
-          setCallState({ engine, kind });
-        }}
+      {/* ---------------- Real location & contact sharing ---------------- */}
+      <LocationShareDialog
+        open={locationOpen}
+        onClose={() => setLocationOpen(false)}
+        onShare={(loc: SharedLocation) =>
+          sendMedia({
+            kind: "location",
+            name: loc.address ?? `${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}`,
+            sizeLabel: `${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}`,
+            mime: "text/location",
+            lat: loc.lat,
+            lng: loc.lng,
+            address: loc.address,
+          })
+        }
       />
-      {callState && active && (
-        <CallOverlay
-          engine={callState.engine}
-          contactName={active.contactName}
-          contactHue={active.avatarHue ?? 226}
-          onClose={() => setCallState(null)}
-          onEnded={endCall}
-        />
-      )}
+      <ContactShareDialog
+        open={contactOpen}
+        onClose={() => setContactOpen(false)}
+        onShare={(card) =>
+          sendMedia({
+            kind: "contact",
+            name: card.name,
+            sizeLabel: "vCard",
+            mime: "text/vcard",
+            contactCard: card,
+          })
+        }
+      />
+
+      {/* Incoming rings and the active call overlay are mounted globally. */}
 
       {/* ---------------- AI reply modal ---------------- */}
       <Modal

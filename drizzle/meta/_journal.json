@@ -8,6 +8,13 @@
       "when": 1792993866570,
       "tag": "0000_initial",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1792993900000,
+      "tag": "0001_message_metadata",
+      "breakpoints": true
     }
   ]
 }

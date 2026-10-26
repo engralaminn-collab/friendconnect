@@ -78,6 +78,10 @@ export interface MessageDto {
   poll: PollDto | null;
   myReceipt: "delivered" | "read" | null;
   receiptSummary: { deliveredTo: string[]; readBy: string[] };
+  metadata: {
+    location?: { lat: number; lng: number; address?: string };
+    contactCard?: { name: string; phone: string; company?: string };
+  } | null;
 }
 
 export interface ConversationMemberDto {

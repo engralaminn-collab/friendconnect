@@ -6,6 +6,7 @@ import {
   boolean,
   datetime,
   index,
+  json,
   mysqlTable,
   primaryKey,
   text,
@@ -40,6 +41,8 @@ export const messages = mysqlTable(
     editedAt: datetime("edited_at", { fsp: 3 }),
     deletedAt: datetime("deleted_at", { fsp: 3 }),
     systemKind: varchar("system_kind", { length: 16 }),
+    /** Structured payload for location and contact-card messages. */
+    metadata: json("metadata"),
     createdAt: datetime("created_at", { fsp: 3 }).notNull().$defaultFn(now),
   },
   (t) => ({
