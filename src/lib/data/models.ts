@@ -1,0 +1,316 @@
+export interface ModelCard {
+  id: string;
+  name: string;
+  provider: string;
+  family: string;
+  context: number;
+  inputCost: number;
+  outputCost: number;
+  speed: number;
+  quality: number;
+  reasoning: boolean;
+  vision: boolean;
+  tools: boolean;
+  openWeights: boolean;
+  strengths: string[];
+  bestFor: string;
+  color: string;
+}
+
+export const MODEL_CATALOG: ModelCard[] = [
+  {
+    id: "claude-opus-4",
+    name: "Claude Opus 4",
+    provider: "Anthropic",
+    family: "Claude 4",
+    context: 200_000,
+    inputCost: 15,
+    outputCost: 75,
+    speed: 72,
+    quality: 96,
+    reasoning: true,
+    vision: true,
+    tools: true,
+    openWeights: false,
+    strengths: ["Long-horizon agentic work", "Careful code review", "Instruction fidelity"],
+    bestFor: "Complex agents and multi-step reasoning",
+    color: "#d97757",
+  },
+  {
+    id: "claude-sonnet-4",
+    name: "Claude Sonnet 4",
+    provider: "Anthropic",
+    family: "Claude 4",
+    context: 200_000,
+    inputCost: 3,
+    outputCost: 15,
+    speed: 86,
+    quality: 90,
+    reasoning: true,
+    vision: true,
+    tools: true,
+    openWeights: false,
+    strengths: ["Balanced cost and quality", "Fast edits", "Document analysis"],
+    bestFor: "Everyday production workloads",
+    color: "#d97757",
+  },
+  {
+    id: "gpt-5",
+    name: "GPT-5",
+    provider: "OpenAI",
+    family: "GPT-5",
+    context: 400_000,
+    inputCost: 8,
+    outputCost: 32,
+    speed: 78,
+    quality: 93,
+    reasoning: true,
+    vision: true,
+    tools: true,
+    openWeights: false,
+    strengths: ["Structured output", "Tool calling", "Broad knowledge"],
+    bestFor: "General purpose production",
+    color: "#10a37f",
+  },
+  {
+    id: "gpt-5-mini",
+    name: "GPT-5 mini",
+    provider: "OpenAI",
+    family: "GPT-5",
+    context: 400_000,
+    inputCost: 0.6,
+    outputCost: 2.4,
+    speed: 94,
+    quality: 82,
+    reasoning: false,
+    vision: true,
+    tools: true,
+    openWeights: false,
+    strengths: ["Very low cost", "High throughput", "Classification"],
+    bestFor: "High-volume classification and routing",
+    color: "#10a37f",
+  },
+  {
+    id: "gemini-2.5-pro",
+    name: "Gemini 2.5 Pro",
+    provider: "Google",
+    family: "Gemini 2.5",
+    context: 1_000_000,
+    inputCost: 5,
+    outputCost: 15,
+    speed: 74,
+    quality: 92,
+    reasoning: true,
+    vision: true,
+    tools: true,
+    openWeights: false,
+    strengths: ["One million token context", "Long documents", "Multimodal"],
+    bestFor: "Whole-corpus analysis",
+    color: "#4285f4",
+  },
+  {
+    id: "glm-5",
+    name: "GLM-5",
+    provider: "Zhipu AI",
+    family: "GLM",
+    context: 200_000,
+    inputCost: 1.2,
+    outputCost: 5,
+    speed: 82,
+    quality: 84,
+    reasoning: true,
+    vision: false,
+    tools: true,
+    openWeights: true,
+    strengths: ["Strong Chinese and English", "Low cost", "Open weights"],
+    bestFor: "Cost-sensitive multilingual work",
+    color: "#6b7bff",
+  },
+  {
+    id: "deepseek-v3",
+    name: "DeepSeek V3",
+    provider: "DeepSeek",
+    family: "DeepSeek",
+    context: 128_000,
+    inputCost: 0.4,
+    outputCost: 1.6,
+    speed: 88,
+    quality: 81,
+    reasoning: false,
+    vision: false,
+    tools: true,
+    openWeights: true,
+    strengths: ["Extremely cheap", "Strong coding", "Open weights"],
+    bestFor: "Bulk processing at low cost",
+    color: "#4d6bfe",
+  },
+  {
+    id: "llama-4",
+    name: "Llama 4 Maverick",
+    provider: "Meta",
+    family: "Llama 4",
+    context: 1_000_000,
+    inputCost: 0.2,
+    outputCost: 0.8,
+    speed: 92,
+    quality: 78,
+    reasoning: false,
+    vision: true,
+    tools: true,
+    openWeights: true,
+    strengths: ["Self-hostable", "Very cheap", "Long context"],
+    bestFor: "Private and on-premise deployments",
+    color: "#0866ff",
+  },
+  {
+    id: "qwen3-max",
+    name: "Qwen3 Max",
+    provider: "Alibaba",
+    family: "Qwen3",
+    context: 256_000,
+    inputCost: 2.4,
+    outputCost: 9.6,
+    speed: 80,
+    quality: 86,
+    reasoning: true,
+    vision: false,
+    tools: true,
+    openWeights: true,
+    strengths: ["Long instructions", "Stable JSON output", "Open weights"],
+    bestFor: "Reliable structured extraction",
+    color: "#615ced",
+  },
+  {
+    id: "mistral-large",
+    name: "Mistral Large 3",
+    provider: "Mistral",
+    family: "Mistral",
+    context: 128_000,
+    inputCost: 2,
+    outputCost: 6,
+    speed: 84,
+    quality: 83,
+    reasoning: false,
+    vision: false,
+    tools: true,
+    openWeights: false,
+    strengths: ["EU-hosted", "Low latency", "Good instruction following"],
+    bestFor: "EU data residency",
+    color: "#fa500f",
+  },
+  {
+    id: "grok-4",
+    name: "Grok 4",
+    provider: "xAI",
+    family: "Grok",
+    context: 256_000,
+    inputCost: 3,
+    outputCost: 15,
+    speed: 76,
+    quality: 88,
+    reasoning: true,
+    vision: true,
+    tools: true,
+    openWeights: false,
+    strengths: ["Real-time awareness", "Sharp opinions", "Large context"],
+    bestFor: "Trend analysis and fast iteration",
+    color: "#000000",
+  },
+  {
+    id: "local-llama",
+    name: "Local Llama 3.3 70B",
+    provider: "Self-hosted",
+    family: "Llama 3",
+    context: 128_000,
+    inputCost: 0,
+    outputCost: 0,
+    speed: 64,
+    quality: 79,
+    reasoning: false,
+    vision: false,
+    tools: true,
+    openWeights: true,
+    strengths: ["No data leaves the machine", "No per-token cost", "Full control"],
+    bestFor: "Regulated and confidential workloads",
+    color: "#64748b",
+  },
+];
+
+export const ROUTER_RULES = [
+  {
+    task: "Classify a record",
+    pick: "gpt-5-mini",
+    why: "Classification is pattern matching, not reasoning. Pay the cheapest model that can do it.",
+    saving: "92% vs a frontier model",
+  },
+  {
+    task: "Summarise a 300-page document",
+    pick: "gemini-2.5-pro",
+    why: "One million tokens of context means one pass, no chunking, no lossy map-reduce.",
+    saving: "3× fewer calls",
+  },
+  {
+    task: "Rewrite a landing page",
+    pick: "claude-sonnet-4",
+    why: "Voice matching needs instruction fidelity more than raw intelligence.",
+    saving: "80% cheaper than Opus",
+  },
+  {
+    task: "Run a 15-step agent loop",
+    pick: "claude-opus-4",
+    why: "A long loop compounds errors. Buy the reliability once instead of retrying five times.",
+    saving: "fewer wasted steps",
+  },
+  {
+    task: "Extract 40 fields into JSON",
+    pick: "qwen3-max",
+    why: "Schema compliance is the whole job. Pick the model with the most stable JSON.",
+    saving: "6× cheaper than Opus",
+  },
+  {
+    task: "Confidential client data",
+    pick: "local-llama",
+    why: "When the data cannot leave the machine, the model list collapses to one option.",
+    saving: "no egress at all",
+  },
+];
+
+export interface ChatTurn {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+export const SCENARIO_PROMPTS = [
+  {
+    id: "sc1",
+    title: "Lead scoring rubric",
+    prompt:
+      "Score this lead against our ICP (EMEA SaaS, 50–500 employees, sells to procurement, Series A–C). Return a score 0–100 and the three signals that drove it.",
+    system:
+      "You are a RevOps analyst. Be terse. Never invent a fact that is not in the input.",
+  },
+  {
+    id: "sc2",
+    title: "Humanise a paragraph",
+    prompt:
+      "Rewrite this so it sounds like a person wrote it on a Tuesday morning, not a committee approved it.",
+    system:
+      "You are an editor. Remove clichés, hedges and filler. Keep every claim intact.",
+  },
+  {
+    id: "sc3",
+    title: "Explain a stuck application",
+    prompt:
+      "A student's application has been waiting on a reference letter for 19 days. Write the message we should send.",
+    system:
+      "You are a student adviser. Warm, specific, and short. One ask, one deadline.",
+  },
+  {
+    id: "sc4",
+    title: "Debug an agent loop",
+    prompt:
+      "Our agent calls the same tool with identical arguments three times then returns a wrong answer. Diagnose it.",
+    system:
+      "You are an engineer debugging a tool-calling loop. Name the failure mode, then give the fix.",
+  },
+];
