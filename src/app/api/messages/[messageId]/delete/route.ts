@@ -4,11 +4,11 @@ import { getSessionUser } from '@/lib/session'
 import { errorJson, json } from '@/lib/serialize'
 
 // POST /api/messages/[id]/delete  { scope: 'me' | 'everyone' }
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ messageId: string }> }) {
   try {
     const me = await getSessionUser()
     if (!me) return errorJson('Unauthorized', 401)
-    const { id } = await params
+    const { messageId: id } = await params
     const body = await req.json()
     const scope = body.scope === 'everyone' ? 'everyone' : 'me'
     const msg = await db.message.findUnique({ where: { id } })

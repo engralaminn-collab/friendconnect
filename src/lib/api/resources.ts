@@ -34,10 +34,17 @@ export const profileApi = {
   get: () => api.get<{ profile: PublicUser }>("/api/profile"),
   update: (patch: Record<string, unknown>) => api.patch<{ profile: PublicUser }>("/api/profile", patch),
   setAvatar: (mediaId: string) => api.post<{ profile: PublicUser }>("/api/profile/avatar", { mediaId }),
+  /**
+   * Exact email / exact handle lookup only — see
+   * `src/server/privacy/visibility.ts`. There is no directory search.
+   */
   searchUsers: (q: string) =>
-    api.get<{ results: Array<Pick<PublicUser, "id" | "email" | "displayName" | "handle">> }>(
-      `/api/users/search?q=${encodeURIComponent(q)}`,
-    ),
+    api
+      .get<{
+        results?: Array<Pick<PublicUser, "id" | "email" | "displayName" | "handle">>;
+        users?: Array<Pick<PublicUser, "id" | "email" | "displayName" | "handle">>;
+      }>(`/api/users/search?q=${encodeURIComponent(q)}`)
+      .then((res) => ({ results: res.results ?? res.users ?? [] })),
 };
 
 // ---- Contacts --------------------------------------------------------------

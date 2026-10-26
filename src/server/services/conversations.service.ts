@@ -271,7 +271,7 @@ export async function getConversation(userId: string, conversationId: string): P
     lastReadAt: m.member.lastReadAt ? m.member.lastReadAt.toISOString() : null,
   }));
 
-  let lastMessage = null;
+  let lastMessage: Awaited<ReturnType<typeof hydrateMessages>>[number] | null = null;
   if (conv.lastMessageId) {
     const rows = await db.select().from(messages).where(eq(messages.id, conv.lastMessageId)).limit(1);
     if (rows.length) {

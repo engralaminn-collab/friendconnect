@@ -4,11 +4,11 @@ import { getSessionUser } from '@/lib/session'
 import { errorJson, json } from '@/lib/serialize'
 
 // POST /api/messages/[id]/remind { remindAt } — set a reminder for a message
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ messageId: string }> }) {
   try {
     const me = await getSessionUser()
     if (!me) return errorJson('Unauthorized', 401)
-    const { id } = await params
+    const { messageId: id } = await params
     const body = await req.json()
     const remindAt = body.remindAt ? new Date(body.remindAt) : null
     if (!remindAt || remindAt.getTime() <= Date.now()) return errorJson('remindAt must be a future date', 400)
@@ -29,11 +29,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 // DELETE cancel a reminder
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ messageId: string }> }) {
   try {
     const me = await getSessionUser()
     if (!me) return errorJson('Unauthorized', 401)
-    const { id } = await params
+    const { messageId: id } = await params
     await db.messageReminder.deleteMany({ where: { userId: me.id, messageId: id } })
     return json({ ok: true })
   } catch (e: any) {

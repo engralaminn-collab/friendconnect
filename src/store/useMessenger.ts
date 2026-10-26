@@ -29,6 +29,7 @@ import type {
 import { uid } from "@/lib/utils";
 import { conversationsApi, messagesApi, contactsApi, callsApi } from "@/lib/api/resources";
 import type { ConversationDto, MessageDto } from "@/lib/api/types";
+import type { Stage } from "@/lib/types";
 import { ApiClientError } from "@/lib/api/client";
 import { messageToLegacy, conversationToThread } from "@/lib/api/message-mapper";
 import { getSocket } from "@/lib/realtime/socket";
@@ -305,7 +306,7 @@ export const useMessenger = create<MessengerState>()((set, get) => {
           email: c.email ?? "",
           phone: c.phone ?? undefined,
           tags: c.tags,
-          stage: "lead",
+          stage: "lead" as Stage,
           value: 0,
           source: "friendconnect",
           owner: "me",

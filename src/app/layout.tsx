@@ -1,14 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Geist } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+import { AuthProvider } from "@/components/auth/AuthProvider";
 
 export const metadata: Metadata = {
   title: "FriendConnect — Reconnect with old friends",
@@ -51,11 +46,15 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: SW_SCRIPT }} />
       </head>
-      <body className={`${geistSans.variable} antialiased bg-background text-foreground`}>
+      <body className="antialiased bg-background text-foreground">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange={false}>
-          {children}
-          <Toaster />
-          <SonnerToaster position="top-center" richColors closeButton />
+          {/* Session/websocket/call context for every route: /login, /register, /app/*.
+              The private SPA at `/` adds its own FC providers inside this tree. */}
+          <AuthProvider>
+            {children}
+            <Toaster />
+            <SonnerToaster position="top-center" richColors closeButton />
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -16,7 +16,13 @@ export async function GET() {
     })
     const now = Date.now()
     const onlineThreshold = 2 * 60 * 1000 // 2 min since lastSeen = online
-    const online = []
+    const online: Array<{
+      id: string
+      username: string
+      name: string
+      photoUrl: string | null
+      lastSeen: string | null
+    }> = []
     for (const f of friendships) {
       const other = f.requesterId === me.id ? f.receiver : f.requester
       const lastSeen = other.profile?.lastSeen ? other.profile.lastSeen.getTime() : 0

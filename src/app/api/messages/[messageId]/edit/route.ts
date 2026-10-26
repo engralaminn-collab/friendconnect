@@ -4,11 +4,11 @@ import { getSessionUser } from '@/lib/session'
 import { errorJson, json } from '@/lib/serialize'
 
 // POST /api/messages/[id]/edit  { content } — sender only, within 15 min of creation
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ messageId: string }> }) {
   try {
     const me = await getSessionUser()
     if (!me) return errorJson('Unauthorized', 401)
-    const { id } = await params
+    const { messageId: id } = await params
     const body = await req.json()
     const content = String(body.content || '').trim().slice(0, 5000)
     if (!content) return errorJson('Content cannot be empty', 400)

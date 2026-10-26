@@ -1,4 +1,5 @@
-import { and, eq, like, ne, or } from "drizzle-orm";
+import { and, eq, ne, or } from "drizzle-orm";
+import { isSearchLookupAllowed, MAX_SEARCH_RESULTS } from "../privacy/visibility";
 import { z } from "zod";
 import { getDb } from "../db/client";
 import { users, profiles, media } from "../db/schema";
@@ -87,12 +88,15 @@ export function validateUserSearch(q: unknown) {
   return userSearchSchema.parse({ q });
 }
 
-/** Deliberately limited search: exact email/handle or prefix match, capped. */
+/**
+ * Deliberately limited search: an exact email address or an exact handle, and
+ * nothing else. Prefix/name matching is not offered — FriendConnect members are
+ * invisible until a connection request is accepted, so search must not be
+ * usable to enumerate the community. See src/server/privacy/visibility.ts.
+ */
 export async function searchUsers(requesterId: string, q: string) {
   const term = q.trim().toLowerCase();
-  // Escape LIKE wildcards in user input so % and _ are treated literally.
-  const escaped = term.replace(/[\\%_]/g, (ch) => `\\${ch}`);
-  const prefix = `${escaped}%`;
+  if (!isSearchLookupAllowed(term)) return [];
   const db = getDb();
   // Filtering happens in SQL (not after a 50-row fetch) so matches are never
   // silently missed once the platform has more users than the preview limit.
@@ -108,13 +112,8 @@ export async function searchUsers(requesterId: string, q: string) {
       and(
         eq(users.status, "active"),
         ne(users.id, requesterId),
-        or(
-          eq(users.email, term),
-          eq(users.handle, term),
-          like(users.displayName, prefix),
-          like(users.handle, prefix),
-        ),
+        or(eq(users.email, term), eq(users.handle, term)),
       ),
     )
-    .limit(10);
+    .limit(MAX_SEARCH_RESULTS);
 }
