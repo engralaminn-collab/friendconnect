@@ -125,6 +125,7 @@ plus a public marketing site.
 
 | Document | What it covers |
 | --- | --- |
+| [docs/HANDOVER.md](docs/HANDOVER.md) | Start here: run, deploy, operate, what was verified, what was not |
 | [docs/BILL-AGENT.md](docs/BILL-AGENT.md) | The operator: tool registry contract, run loop, offline grammar, control API, safety, limits |
 | [docs/OPEN-SOURCE-PROVIDERS.md](docs/OPEN-SOURCE-PROVIDERS.md) | 15 providers, exact local setup commands, model advice, probe troubleshooting, how to add one |
 | [docs/SERVER-SPEC.md](docs/SERVER-SPEC.md) | The `panel.alolabs.net` host, deploy, environment, nginx, Cloudflare, rollback |
