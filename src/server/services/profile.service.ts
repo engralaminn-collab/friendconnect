@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, like, ne, or } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "../db/client";
 import { users, profiles, media } from "../db/schema";
@@ -90,8 +90,13 @@ export function validateUserSearch(q: unknown) {
 /** Deliberately limited search: exact email/handle or prefix match, capped. */
 export async function searchUsers(requesterId: string, q: string) {
   const term = q.trim().toLowerCase();
+  // Escape LIKE wildcards in user input so % and _ are treated literally.
+  const escaped = term.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+  const prefix = `${escaped}%`;
   const db = getDb();
-  const rows = await db
+  // Filtering happens in SQL (not after a 50-row fetch) so matches are never
+  // silently missed once the platform has more users than the preview limit.
+  return db
     .select({
       id: users.id,
       email: users.email,
@@ -99,16 +104,17 @@ export async function searchUsers(requesterId: string, q: string) {
       handle: users.handle,
     })
     .from(users)
-    .where(eq(users.status, "active"))
-    .limit(50);
-  return rows
-    .filter(
-      (u) =>
-        u.id !== requesterId &&
-        (u.email.toLowerCase() === term ||
-          (u.handle ?? "").toLowerCase() === term ||
-          u.displayName.toLowerCase().startsWith(term) ||
-          (u.handle ?? "").toLowerCase().startsWith(term)),
+    .where(
+      and(
+        eq(users.status, "active"),
+        ne(users.id, requesterId),
+        or(
+          eq(users.email, term),
+          eq(users.handle, term),
+          like(users.displayName, prefix),
+          like(users.handle, prefix),
+        ),
+      ),
     )
-    .slice(0, 10);
+    .limit(10);
 }

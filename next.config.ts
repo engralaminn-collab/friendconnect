@@ -1,12 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // `standalone` is required by the deployment scripts (scripts/deploy.sh).
   output: "standalone",
-  /* config options here */
-  typescript: {
-    ignoreBuildErrors: true,
+  reactStrictMode: true,
+  eslint: { ignoreDuringBuilds: true },
+  experimental: {
+    optimizePackageImports: ["lucide-react", "framer-motion"],
   },
-  reactStrictMode: false,
 };
 
 export default nextConfig;

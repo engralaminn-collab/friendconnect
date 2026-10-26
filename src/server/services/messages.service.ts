@@ -39,7 +39,11 @@ export const sendMessageSchema = z.object({
   replyToId: z.string().max(36).optional(),
   mediaIds: z.array(z.string().min(1)).max(10).optional(),
   location: z
-    .object({ lat: z.number(), lng: z.number(), address: z.string().max(300).optional() })
+    .object({
+      lat: z.number().min(-90).max(90),
+      lng: z.number().min(-180).max(180),
+      address: z.string().max(300).optional(),
+    })
     .optional(),
   contactCard: z
     .object({ name: z.string().max(120), phone: z.string().max(32), company: z.string().max(120).optional() })
