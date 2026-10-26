@@ -221,6 +221,37 @@ export function initRealtime(httpServer: HttpServer): Server {
       },
     );
 
+    // ---- Call lifecycle relays -------------------------------------------
+    const relayToCallPeers = async (
+      eventName: string,
+      payload: { callId?: string; [key: string]: unknown },
+      ack?: (r: unknown) => void,
+    ) => {
+      if (!payload?.callId || !(await isCallParticipant(payload.callId, userId))) {
+        ack?.({ ok: false, error: "not_allowed" });
+        return;
+      }
+      const participants = await getDb()
+        .select({ userId: callParticipants.userId, state: callParticipants.state })
+        .from(callParticipants)
+        .where(eq(callParticipants.callId, payload.callId));
+      for (const p of participants) {
+        if (p.userId === userId) continue;
+        io.to(`user:${p.userId}`).emit(eventName, { ...payload, fromUserId: userId });
+      }
+      ack?.({ ok: true });
+    };
+
+    socket.on(REALTIME_EVENTS.callHangup, (payload, ack) => {
+      void relayToCallPeers(REALTIME_EVENTS.callHangup, payload, ack);
+    });
+    socket.on(REALTIME_EVENTS.callAccept, (payload, ack) => {
+      void relayToCallPeers(REALTIME_EVENTS.callAccept, payload, ack);
+    });
+    socket.on(REALTIME_EVENTS.callReject, (payload, ack) => {
+      void relayToCallPeers(REALTIME_EVENTS.callReject, payload, ack);
+    });
+
     socket.on("disconnect", () => {
       const set = presence.get(userId);
       set?.delete(socket.id);

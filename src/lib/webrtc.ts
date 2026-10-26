@@ -54,6 +54,18 @@ export interface CallOptions {
 
 type Listener = (s: CallSnapshot) => void;
 
+/** Public surface consumed by CallOverlay; implemented by local and remote engines. */
+export interface CallEngineLike {
+  readonly current: CallSnapshot;
+  subscribe(fn: Listener): () => void;
+  hangUp(): void;
+  toggleMute(): void;
+  toggleCamera(): void;
+  toggleSpeaker(): void;
+  switchCamera(): Promise<unknown>;
+  startScreenShare(): Promise<unknown>;
+}
+
 /** ITU E-model style MOS estimate from RTT, jitter and loss. */
 export function estimateMos(rtt: number, jitter: number, loss: number) {
   const r = Math.max(0, 1 - rtt / 300);

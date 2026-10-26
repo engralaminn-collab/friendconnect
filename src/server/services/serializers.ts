@@ -66,6 +66,8 @@ export interface MessageDto {
   poll: PollDto | null;
   /** Current user's receipt state for this message (as recipient). */
   myReceipt: "delivered" | "read" | null;
+  /** Aggregate recipient receipts (used by the sender for tick state). */
+  receiptSummary: { deliveredTo: string[]; readBy: string[] };
 }
 
 export interface ConversationMemberDto {
@@ -125,7 +127,7 @@ export function attachmentDto(
 
 export function baseMessageDto(row: MessageRow): Omit<
   MessageDto,
-  "attachments" | "reactions" | "poll" | "myReceipt"
+  "attachments" | "reactions" | "poll" | "myReceipt" | "receiptSummary"
 > {
   return {
     id: row.id,

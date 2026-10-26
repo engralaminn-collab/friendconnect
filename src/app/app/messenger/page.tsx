@@ -57,10 +57,14 @@ import {
 import { KidSafePanel, ReportDialog } from "@/components/messaging/Safety";
 import { GibberChannel } from "@/components/messaging/GibberChannel";
 import { GeneratedArt } from "@/components/studio/GeneratedArt";
-import { useStore } from "@/store/useStore";
+import { useMessenger as useStore } from "@/store/useMessenger";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { useToast } from "@/store/useUI";
-import { cn, copyToClipboard, downloadFile, relativeTime } from "@/lib/utils";
-import { CallEngine } from "@/lib/webrtc";
+import { cn, copyToClipboard, downloadFile, formatDuration, relativeTime } from "@/lib/utils";
+import { RemoteCallEngine } from "@/lib/webrtc/remote-engine";
+import { IncomingCallDialog } from "@/components/messaging/IncomingCallDialog";
+import { mediaApi, profileApi } from "@/lib/api/resources";
+import { VoiceRecorder } from "@/lib/media/voice-recorder";
 import { humanize } from "@/lib/humanizer";
 import type { MediaAttachment, Message, Thread } from "@/lib/types";
 
@@ -114,6 +118,10 @@ export default function MessengerPage() {
   const feed = useStore((s) => s.feed);
   const markFeedRead = useStore((s) => s.markFeedRead);
   const markAllFeedRead = useStore((s) => s.markAllFeedRead);
+  const bootstrap = useStore((s) => s.bootstrap);
+  const openThread = useStore((s) => s.openThread);
+  const createThread = useStore((s) => s.createThread);
+  const { user } = useAuth();
   const toast = useToast();
 
   const [scope, setScope] = React.useState<Scope>("all");
@@ -127,12 +135,17 @@ export default function MessengerPage() {
   const [showAttach, setShowAttach] = React.useState(false);
   const [showInfo, setShowInfo] = React.useState(false);
   const [showNewChat, setShowNewChat] = React.useState(false);
+  const [userQuery, setUserQuery] = React.useState("");
+  const [userResults, setUserResults] = React.useState<
+    { id: string; email: string | null; displayName: string; handle: string | null }[]
+  >([]);
+  const [searching, setSearching] = React.useState(false);
   const [showSearch, setShowSearch] = React.useState(false);
   const [messageQuery, setMessageQuery] = React.useState("");
   const [recording, setRecording] = React.useState(false);
   const [recordSec, setRecordSec] = React.useState(0);
   const [callState, setCallState] = React.useState<{
-    engine: CallEngine;
+    engine: RemoteCallEngine;
     kind: "audio" | "video";
   } | null>(null);
   const [aiOpen, setAiOpen] = React.useState(false);
@@ -170,7 +183,7 @@ export default function MessengerPage() {
     null,
   );
 
-  const engineRef = React.useRef<CallEngine | null>(null);
+  const engineRef = React.useRef<RemoteCallEngine | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
   const recordTimer = React.useRef<number>(0);
@@ -180,8 +193,70 @@ export default function MessengerPage() {
     ? contacts.find((c) => c.id === active.contactId)
     : null;
 
+  // Load authoritative data once authenticated; socket updates take over live.
   React.useEffect(() => {
-    if (active) markThreadRead(active.id);
+    if (user?.id) void bootstrap(user.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // Debounced platform user search for starting new conversations.
+  React.useEffect(() => {
+    if (!showNewChat) {
+      setUserQuery("");
+      setUserResults([]);
+      return;
+    }
+    const q = userQuery.trim();
+    if (q.length < 2) {
+      setUserResults([]);
+      return;
+    }
+    const t = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const { results } = await profileApi.searchUsers(q);
+        setUserResults(results.filter((r) => r.id !== user?.id));
+      } catch {
+        setUserResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [userQuery, showNewChat, user?.id]);
+
+  const startWithUser = async (peerId: string) => {
+    const existing = threads.find((t) => t.contactId === peerId);
+    if (existing) {
+      setActiveId(existing.id);
+      setShowNewChat(false);
+      setMobileChat(true);
+      return;
+    }
+    try {
+      const thread = await createThread({ memberIds: [peerId] });
+      setActiveId(thread.id);
+      setShowNewChat(false);
+      setMobileChat(true);
+    } catch (err) {
+      toast.error(
+        "Could not start conversation",
+        err instanceof Error ? err.message : "Please try again.",
+      );
+    }
+  };
+
+  // Auto-select the first conversation after the initial load.
+  React.useEffect(() => {
+    if (!activeId && threads.length) setActiveId(threads[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threads.length]);
+
+  React.useEffect(() => {
+    if (active) {
+      void openThread(active.id);
+      markThreadRead(active.id);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.id]);
 
@@ -246,31 +321,53 @@ export default function MessengerPage() {
     toast.success("Shared", `${media.name} sent to ${active.contactName}.`);
   };
 
+  const [uploading, setUploading] = React.useState<string | null>(null);
+  const recorderRef = React.useRef<VoiceRecorder | null>(null);
+
   const pickFile = (accept: string, kind: MediaAttachment["kind"]) => {
     const input = fileRef.current;
     if (!input) return;
     input.accept = accept;
-    input.onchange = () => {
+    input.onchange = async () => {
       const file = input.files?.[0];
-      if (!file) return;
-      const isImage = kind === "image";
-      const isVideo = kind === "video";
-      sendMedia({
-        kind,
-        name: file.name,
-        sizeLabel: `${(file.size / 1024).toFixed(0)} KB`,
-        mime: file.type || "application/octet-stream",
-        seed: file.name,
-        width: isImage ? 1280 : undefined,
-        height: isImage ? 960 : undefined,
-        resolution: isVideo ? "1080p" : undefined,
-        durationSec: isVideo ? 24 : undefined,
-      });
+      if (!file || !active) return;
+      try {
+        setUploading(kind);
+        const { media } = await mediaApi.upload(file, { kind });
+        sendMedia({
+          kind,
+          name: media.filename,
+          sizeLabel: `${Math.max(1, Math.round(Number(media.sizeBytes) / 1024))} KB`,
+          mime: media.mime,
+          seed: media.url,
+          durationSec: media.durationSec ?? undefined,
+        });
+      } catch (err) {
+        toast.error(
+          "Upload failed",
+          err instanceof Error ? err.message : "Please try again.",
+        );
+      } finally {
+        setUploading(null);
+        input.value = "";
+      }
     };
     input.click();
   };
 
-  const startRecording = () => {
+  const startRecording = async () => {
+    const recorder = new VoiceRecorder();
+    const status = await recorder.start();
+    if (status !== "recording") {
+      toast.error(
+        "Microphone unavailable",
+        status === "denied"
+          ? "Permission was denied. Allow microphone access and try again."
+          : "Voice recording is not supported in this browser.",
+      );
+      return;
+    }
+    recorderRef.current = recorder;
     setRecording(true);
     setRecordSec(0);
     recordTimer.current = window.setInterval(
@@ -279,37 +376,62 @@ export default function MessengerPage() {
     );
   };
 
-  const stopRecording = () => {
+  const stopRecording = async () => {
     window.clearInterval(recordTimer.current);
     setRecording(false);
-    const secs = Math.max(1, recordSec);
-    sendMedia({
-      kind: "voice",
-      name: "voice-message",
-      sizeLabel: `0:${String(secs % 60).padStart(2, "0")}`,
-      mime: "audio/ogg",
-      durationSec: secs,
-      seed: `voice ${active?.contactName ?? ""} ${secs}`,
-    });
+    const recorder = recorderRef.current;
+    recorderRef.current = null;
+    const result = await recorder?.stop(false);
+    const secs = result?.durationSec ?? Math.max(1, recordSec);
     setRecordSec(0);
-    toast.success("Voice note sent", `${secs}s`);
+    if (!result || !active) return;
+    try {
+      setUploading("voice");
+      const { media } = await mediaApi.upload(result.blob, {
+        kind: "voice",
+        durationSec: result.durationSec,
+      });
+      sendMedia({
+        kind: "voice",
+        name: media.filename,
+        sizeLabel: formatDuration(result.durationSec),
+        mime: result.mimeType,
+        durationSec: result.durationSec,
+        seed: media.url,
+      });
+      toast.success("Voice note sent", `${secs}s`);
+    } catch (err) {
+      toast.error(
+        "Voice note failed",
+        err instanceof Error ? err.message : "Please try again.",
+      );
+    } finally {
+      setUploading(null);
+    }
   };
 
   const startCall = (kind: "audio" | "video") => {
-    if (!active) return;
-    const engine = new CallEngine();
+    if (!active?.contactId) {
+      toast.error("Call unavailable", "This conversation has no reachable participant.");
+      return;
+    }
+    const engine = new RemoteCallEngine();
     engineRef.current = engine;
     setCallState({ engine, kind });
-    void engine.start({
-      audio: true,
-      video: kind === "video",
-      contactName: active.contactName,
-      contactHue: active.avatarHue ?? 226,
+    engine.start(active.id, active.contactId, kind).catch((err: unknown) => {
+      toast.error(
+        "Call failed",
+        err instanceof Error ? err.message : "Could not start the call.",
+      );
+      engineRef.current = null;
+      setCallState(null);
     });
   };
 
   const endCall = (seconds: number) => {
     if (!active) return;
+    const measured = engineRef.current?.current.quality;
+    const hasMetrics = measured && measured.packetsSent + measured.packetsReceived > 0;
     addCall({
       contactName: active.contactName,
       contactId: active.contactId,
@@ -319,14 +441,10 @@ export default function MessengerPage() {
       durationSec: seconds,
       status: "completed",
       recording: false,
-      quality: {
-        rttMs: 34,
-        jitterMs: 4.1,
-        lossPct: 0.4,
-        bitrateKbps: callState?.kind === "video" ? 1180 : 32,
-        mos: 4.3,
-        codec: callState?.kind === "video" ? "VP9 / Opus" : "Opus",
-      },
+      // Zero values when no peer media flowed — never fabricated metrics.
+      quality: hasMetrics
+        ? measured!
+        : { rttMs: 0, jitterMs: 0, lossPct: 0, bitrateKbps: 0, mos: 0, codec: "—" },
     });
     engineRef.current = null;
     setCallState(null);
@@ -1338,7 +1456,13 @@ export default function MessengerPage() {
         />
       )}
 
-      {/* ---------------- Call overlay ---------------- */}
+      {/* ---------------- Incoming / active calls ---------------- */}
+      <IncomingCallDialog
+        onAccept={(engine, kind) => {
+          engineRef.current = engine;
+          setCallState({ engine, kind });
+        }}
+      />
       {callState && active && (
         <CallOverlay
           engine={callState.engine}
@@ -1531,34 +1655,47 @@ export default function MessengerPage() {
         <div className="space-y-4">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--fc-fg-subtle)]" />
-            <input className="field pl-9" placeholder="Search contacts…" />
+            <input
+              className="field pl-9"
+              placeholder="Search people by name or email…"
+              value={userQuery}
+              onChange={(e) => setUserQuery(e.target.value)}
+            />
           </div>
           <ul className="max-h-72 space-y-1 overflow-y-auto">
-            {contacts.map((c) => (
-              <li key={c.id}>
-                <button
-                  onClick={() => {
-                    const existing = threads.find((t) => t.contactId === c.id);
-                    if (existing) setActiveId(existing.id);
-                    toast.info("Conversation", `Opening ${c.name}.`);
-                    setShowNewChat(false);
-                    setMobileChat(true);
-                  }}
-                  className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--fc-surface-2)]"
-                >
-                  <Avatar name={c.name} hue={c.avatarHue} size={34} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-semibold">
-                      {c.name}
-                    </span>
-                    <span className="block truncate text-[11px] text-[var(--fc-fg-subtle)]">
-                      {c.email}
-                    </span>
-                  </span>
-                  <Badge>{c.stage}</Badge>
-                </button>
+            {userQuery.trim().length < 2 ? (
+              <li className="px-2 py-6 text-center text-[12.5px] text-[var(--fc-fg-subtle)]">
+                Type at least two characters to find registered users.
               </li>
-            ))}
+            ) : searching ? (
+              <li className="px-2 py-6 text-center text-[12.5px] text-[var(--fc-fg-subtle)]">
+                Searching…
+              </li>
+            ) : userResults.length === 0 ? (
+              <li className="px-2 py-6 text-center text-[12.5px] text-[var(--fc-fg-subtle)]">
+                No users found for “{userQuery}”.
+              </li>
+            ) : (
+              userResults.map((u) => (
+                <li key={u.id}>
+                  <button
+                    onClick={() => void startWithUser(u.id)}
+                    className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--fc-surface-2)]"
+                  >
+                    <Avatar name={u.displayName} hue={226} size={34} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-semibold">
+                        {u.displayName}
+                      </span>
+                      <span className="block truncate text-[11px] text-[var(--fc-fg-subtle)]">
+                        {u.email ?? u.handle ?? "FriendConnect user"}
+                      </span>
+                    </span>
+                    <Badge tone="brand">Message</Badge>
+                  </button>
+                </li>
+              ))
+            )}
           </ul>
         </div>
       </Modal>
@@ -1836,7 +1973,8 @@ export default function MessengerPage() {
               reportTarget.media?.caption ?? reportTarget.body ?? "Attachment",
             reason,
             detail,
-          });
+            messageId: reportTarget.id,
+          } as Parameters<typeof reportMessage>[0]);
           toast.success("Report sent", "The safety team will review it.");
         }}
       />

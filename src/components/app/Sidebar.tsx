@@ -4,10 +4,14 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronsLeft, Sparkles, X } from "lucide-react";
+import { ChevronsLeft, LogOut, Sparkles, X } from "lucide-react";
 import { navGroups } from "@/lib/nav";
 import { useUI } from "@/store/useUI";
 import { useStore } from "@/store/useStore";
+import { useMessenger } from "@/store/useMessenger";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { useRealtimeConnected } from "@/lib/realtime/useRealtime";
+import { Avatar } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 
 export function Sidebar() {
@@ -17,9 +21,11 @@ export function Sidebar() {
   const setCommandOpen = useUI((s) => s.setCommandOpen);
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
-  const unread = useStore((s) => s.threads.reduce((a, t) => a + t.unread, 0));
+  const unread = useMessenger((s) => s.threads.reduce((a, t) => a + t.unread, 0));
   const notifications = useStore((s) => s.notifications.filter((n) => !n.read).length);
   const leads = useStore((s) => s.leads.filter((l) => l.status === "new").length);
+  const { user, logout } = useAuth();
+  const realtimeConnected = useRealtimeConnected();
 
   const badgeFor = (href: string) => {
     if (href === "/app/inbox" && unread) return unread;
@@ -137,6 +143,46 @@ export function Sidebar() {
       </nav>
 
       <div className="shrink-0 border-t border-[var(--fc-line)] p-2.5">
+        {user && (
+          <div
+            className={cn(
+              "mb-2 flex items-center gap-2.5 rounded-lg bg-[var(--fc-surface-2)] px-2.5 py-2",
+              collapsed && "justify-center px-0",
+            )}
+            title={user.email ?? undefined}
+          >
+            <div className="relative">
+              <Avatar name={user.displayName} hue={226} size={32} />
+              <span
+                className={cn(
+                  "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-[var(--fc-surface-2)]",
+                  realtimeConnected ? "bg-emerald-500" : "bg-slate-400",
+                )}
+                title={realtimeConnected ? "Realtime connected" : "Realtime offline"}
+              />
+            </div>
+            {!collapsed && (
+              <>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-semibold">
+                    {user.displayName}
+                  </span>
+                  <span className="block truncate text-[10.5px] text-[var(--fc-fg-subtle)]">
+                    {user.email ?? user.handle ?? ""}
+                  </span>
+                </span>
+                <button
+                  onClick={() => void logout()}
+                  className="grid size-7 shrink-0 place-items-center rounded-md text-[var(--fc-fg-subtle)] transition-colors hover:bg-[var(--fc-surface-3)] hover:text-rose-500"
+                  aria-label="Sign out"
+                  title="Sign out"
+                >
+                  <LogOut className="size-3.5" />
+                </button>
+              </>
+            )}
+          </div>
+        )}
         {!collapsed && (
           <button
             onClick={() => setCommandOpen(true)}

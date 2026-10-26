@@ -79,7 +79,12 @@ export function MediaViewer({
         )}
 
         <div className="max-h-full max-w-4xl overflow-hidden rounded-2xl border border-white/10">
-          {item.kind === "image" || item.kind === "video" ? (
+          {item.kind === "image" && item.seed?.startsWith("/api/media/") ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={item.seed} alt={item.caption ?? item.name} className="max-h-[70vh] w-auto" />
+          ) : item.kind === "video" && item.seed?.startsWith("/api/media/") ? (
+            <video src={item.seed} controls autoPlay className="max-h-[70vh] w-auto" />
+          ) : item.kind === "image" || item.kind === "video" ? (
             <GeneratedArt
               seed={item.seed ?? item.name}
               className="max-h-[70vh] w-auto"
@@ -147,11 +152,12 @@ export function MediaViewer({
                   : "border-transparent opacity-50 hover:opacity-90",
               )}
             >
-              <GeneratedArt
-                seed={it.seed ?? it.name}
-                className="h-full w-full"
-                rounded={false}
-              />
+              {it.seed?.startsWith("/api/media/") ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={it.seed} alt={it.name} className="h-full w-full object-cover" />
+              ) : (
+                <GeneratedArt seed={it.seed ?? it.name} className="h-full w-full" rounded={false} />
+              )}
             </button>
           ))}
         </div>

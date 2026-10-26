@@ -593,6 +593,8 @@ export interface SavedMessage {
   at: string;
   note: string;
   tag: "important" | "reference" | "todo" | "attachment";
+  /** Set when saved from a real persisted message. */
+  messageId?: ID;
 }
 
 export interface ThreadReply {

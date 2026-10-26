@@ -65,6 +65,18 @@ export async function hydrateMessages(
   const myReceiptByMessage = new Map(
     receiptRows.filter((r) => r.userId === userId).map((r) => [r.messageId, r.state]),
   );
+  const deliveredByMessage = new Map<string, Set<string>>();
+  const readByMessage = new Map<string, Set<string>>();
+  for (const r of receiptRows) {
+    if (r.state === "read" || r.state === "delivered") {
+      if (!deliveredByMessage.has(r.messageId)) deliveredByMessage.set(r.messageId, new Set());
+      deliveredByMessage.get(r.messageId)!.add(r.userId);
+    }
+    if (r.state === "read") {
+      if (!readByMessage.has(r.messageId)) readByMessage.set(r.messageId, new Set());
+      readByMessage.get(r.messageId)!.add(r.userId);
+    }
+  }
 
   const attachmentsByMessage = new Map<string, MessageDto["attachments"]>();
   for (const row of attachmentRows) {
@@ -135,6 +147,10 @@ export async function hydrateMessages(
     reactions: reactionsByMessage.get(row.id) ?? [],
     poll: pollDtoByMessage.get(row.id) ?? null,
     myReceipt: (myReceiptByMessage.get(row.id) as "delivered" | "read" | undefined) ?? null,
+    receiptSummary: {
+      deliveredTo: [...(deliveredByMessage.get(row.id) ?? [])],
+      readBy: [...(readByMessage.get(row.id) ?? [])],
+    },
   }));
 }
 

@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
-import { CallEngine, formatDuration, type CallSnapshot } from "@/lib/webrtc";
+import { formatDuration, type CallEngineLike, type CallSnapshot } from "@/lib/webrtc";
 
 function VideoFeed({
   stream,
@@ -79,7 +79,7 @@ export function CallOverlay({
   onClose,
   onEnded,
 }: {
-  engine: CallEngine;
+  engine: CallEngineLike;
   contactName: string;
   contactHue: number;
   onClose: () => void;
