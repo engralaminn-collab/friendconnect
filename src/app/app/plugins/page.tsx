@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   Blocks,
   Check,
@@ -263,14 +264,13 @@ export default function PluginsPage() {
                 </li>
               ))}
             </ul>
-            <a
-              href="#"
+            <Link
+              href="/app/skills"
               className="btn btn-secondary btn-sm mt-4 w-full"
-              onClick={(e) => e.preventDefault()}
             >
               <ExternalLink className="size-3.5" />
               Publish a plugin
-            </a>
+            </Link>
           </div>
         </aside>
       </div>

@@ -37,6 +37,7 @@ import {
   BookMarked,
   Network,
   Sparkles,
+  BrainCircuit,
 } from "lucide-react";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
@@ -46,7 +47,7 @@ import { Badge } from "@/components/ui/primitives";
 export const metadata: Metadata = {
   title: "Features",
   description:
-    "Nine pillars, forty-two modules: private messaging and calling, revenue, education consultancy, AI marketing, creative studios, agents, knowledge systems, operational insight and the platform tooling that makes an AI coding agent productive.",
+    "Ten pillars, forty-three modules: private messaging and calling, one AI operator that can drive all of them, revenue, education consultancy, AI marketing, creative studios, agents, knowledge systems, operational insight and the platform tooling that makes an AI coding agent productive.",
 };
 
 interface Feature {
@@ -57,6 +58,58 @@ interface Feature {
 }
 
 const pillars: { id: string; title: string; accent: string; lead: string; features: Feature[] }[] = [
+  {
+    id: "operator",
+    title: "The operator",
+    accent: "var(--color-brand-500)",
+    lead: "Bill Agent is one AI that can drive every module below. Not a chatbot beside the product — a tool registry with an approval gate, a bounded run loop and an audit trail, and it works with no model connected at all.",
+    features: [
+      {
+        icon: BrainCircuit,
+        name: "39 tools, one contract",
+        blurb: "Every button in the workspace is a typed tool with a JSON schema, a risk level and a validation rule.",
+        points: [
+          "Arguments validated before execution; unknown fields rejected, not ignored",
+          "Destructive tools always ask a human, whatever the autonomy setting",
+          "Run any tool by hand from the Tools tab to see exactly what changes",
+          "Add a tool in ~20 lines and it appears everywhere automatically",
+        ],
+      },
+      {
+        icon: Cpu,
+        name: "Open-source providers",
+        blurb: "Ollama, vLLM, llama.cpp, LocalAI, LM Studio, TGI — or any OpenAI-compatible gateway you host.",
+        points: [
+          "15 endpoints, open-weights first, each with a real connection probe",
+          "The browser calls the endpoint directly: keys never touch a server",
+          "Two wires supported: OpenAI chat/completions and Ollama api/chat",
+          "Offline grammar covers 14 classes of task with no model at all",
+        ],
+      },
+      {
+        icon: ScanText,
+        name: "Bounded by construction",
+        blurb: "A run stops on four independent conditions, so a loop cannot spend the afternoon on your tab.",
+        points: [
+          "Goal check, step budget, repetition guard, wall-clock budget",
+          "Rejected approval halts the run instead of skipping the call",
+          "Every step records its arguments, result and duration",
+          "Export the whole audit trail as JSON or CSV",
+        ],
+      },
+      {
+        icon: Webhook,
+        name: "A real control surface",
+        blurb: "Anything that can make an HTTP request can press the buttons — cron, n8n, an MCP client, a chat ops bot.",
+        points: [
+          "GET /api/agent/manifest lists every tool with its schema",
+          "POST /api/agent/commands queues a call, settled with the real result",
+          "Bearer AGENT_TOKEN gate, CORS-enabled, no database required",
+          "One open tab drains the queue; nothing runs unattended by accident",
+        ],
+      },
+    ],
+  },
   {
     id: "messaging",
     title: "Private messaging & calling",
@@ -566,7 +619,7 @@ export default function FeaturesPage() {
         <div className="relative mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
           <Reveal className="mx-auto max-w-3xl text-center">
             <span className="chip border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-800 dark:bg-brand-950/60 dark:text-brand-300">
-              42 modules · 9 pillars
+              43 modules · 10 pillars
             </span>
             <h1 className="mt-5 text-4xl font-bold tracking-tight sm:text-5xl">
               Everything below ships in <GradientText>every plan</GradientText>

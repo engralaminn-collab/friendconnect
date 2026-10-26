@@ -188,7 +188,7 @@ single-use, hashed at rest, and expire (`EMAIL_VERIFY_TTL_HOURS`,
 ## 12. Testing
 
 ```bash
-npm test                 # Vitest: 20 categories, 84 assertions (unit + live HTTP/WS)
+npm test                 # Vitest: 157 tests, 29 skipped without a live server/DB
 npm run test:types       # Type-check the test suite
 node scripts/socket-smoke.mjs         # 10 authenticated realtime checks (server live)
 node scripts/media-matrix-smoke.mjs   # 122 media/authz checks with real byte fixtures
@@ -206,3 +206,31 @@ reachable on `FC_BASE_URL` (default `http://localhost:3000`).
    share a recovery point.
 3. Users can self-serve a full JSON export from **Settings → Data**; the same
    endpoint backs the workspace restore/import flow.
+
+## 14. Deploying to alo-server-lap (`panel.alolabs.net`)
+
+The box this build is specified for — Ubuntu 22.04, Node 24 via nvm, PM2 7,
+Nginx 1.18, Cloudflare — is documented end to end in
+[docs/SERVER-SPEC.md](docs/SERVER-SPEC.md). One command does the work:
+
+```bash
+cd ~/projects/friendconnect
+./scripts/deploy-alo-server.sh            # deps → migrations → build → PM2 → nginx → health
+```
+
+The same script, the environment block and a live health check are visible in
+the product at **/app/bill-agent → Deployment**, so an operator can deploy from
+the UI they are looking at rather than a wiki they have to find.
+
+### Operational notes that bite
+
+- **Set `AGENT_TOKEN`** before `/api/agent/*` is reachable from the internet.
+  Without it the queue endpoints are open — fine on localhost, not on a domain.
+- **Cloudflare SSL must be Full (strict)**. Flexible rewrites the origin scheme
+  to http, Secure cookies are dropped, and browser calls fail intermittently.
+- **One operator tab** drains the Bill Agent queue. Two tabs would both drain it.
+  The queue is server memory with a five-minute TTL; a restart drops pending
+  commands, deliberately.
+- **`/app` is not gated by the session cookie** by default, because the workspace
+  is local-first and calls no authenticated API. Set `WORKSPACE_REQUIRES_AUTH=1`
+  to restore the gate on a shared deployment.

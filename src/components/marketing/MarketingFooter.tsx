@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Sparkles, Github, Twitter, Linkedin, Youtube } from "lucide-react";
+import { Sparkles, Github } from "lucide-react";
 
 const columns = [
   {
@@ -70,16 +70,24 @@ export function MarketingFooter() {
               repetitive work.
             </p>
             <div className="mt-6 flex items-center gap-2">
-              {[Github, Twitter, Linkedin, Youtube].map((Icon, i) => (
-                <a
-                  key={i}
-                  href="#"
-                  className="grid size-9 place-items-center rounded-lg border border-[var(--fc-line)] text-[var(--fc-fg-muted)] transition-colors hover:border-[var(--color-brand-400)] hover:text-[var(--color-brand-500)]"
-                  aria-label="Social link"
-                >
-                  <Icon className="size-4" />
-                </a>
-              ))}
+              <a
+                href="https://github.com/engralaminn-collab/friendconnect"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="grid size-9 place-items-center rounded-lg border border-[var(--fc-line)] text-[var(--fc-fg-muted)] transition-colors hover:border-[var(--color-brand-400)] hover:text-[var(--color-brand-500)]"
+                aria-label="FriendConnect on GitHub"
+                title="Source code"
+              >
+                <Github className="size-4" />
+              </a>
+              <Link
+                href="/legal/status"
+                className="grid size-9 place-items-center rounded-lg border border-[var(--fc-line)] text-[var(--fc-fg-muted)] transition-colors hover:border-[var(--color-brand-400)] hover:text-[var(--color-brand-500)]"
+                aria-label="Status"
+                title="Status"
+              >
+                <span className="size-2 rounded-full bg-emerald-500" />
+              </Link>
             </div>
           </div>
 
@@ -112,10 +120,10 @@ export function MarketingFooter() {
             Dhaka and Berlin.
           </p>
           <div className="flex flex-wrap items-center gap-5 text-xs text-[var(--fc-fg-subtle)]">
-            <Link href="#" className="hover:text-[var(--fc-fg)]">Privacy</Link>
-            <Link href="#" className="hover:text-[var(--fc-fg)]">Terms</Link>
-            <Link href="#" className="hover:text-[var(--fc-fg)]">Security</Link>
-            <Link href="#" className="hover:text-[var(--fc-fg)]">Status</Link>
+            <Link href="/legal/privacy" className="hover:text-[var(--fc-fg)]">Privacy</Link>
+            <Link href="/legal/terms" className="hover:text-[var(--fc-fg)]">Terms</Link>
+            <Link href="/legal/security" className="hover:text-[var(--fc-fg)]">Security</Link>
+            <Link href="/legal/status" className="hover:text-[var(--fc-fg)]">Status</Link>
           </div>
         </div>
       </div>

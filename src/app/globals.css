@@ -233,3 +233,391 @@
 .fc-safe-top {
   padding-top: env(safe-area-inset-top, 0px);
 }
+
+/* ============================================================================
+   WORKSPACE SHELL TOKENS + UTILITIES
+   ----------------------------------------------------------------------------
+   The /app module workspace is built from a small, fixed vocabulary:
+   fc-surface / fc-line / fc-fg tokens plus .fc-card, .btn and .field.
+   Everything below is that vocabulary, defined once, so every dashboard
+   shares one visual language in light and dark mode.
+   ========================================================================== */
+
+:root {
+  /* Brand scale — orange (matches --primary #F97316) */
+  --color-brand-50: #FFF7ED;
+  --color-brand-100: #FFEDD5;
+  --color-brand-200: #FED7AA;
+  --color-brand-300: #FDBA74;
+  --color-brand-400: #FB923C;
+  --color-brand-500: #F97316;
+  --color-brand-600: #EA580C;
+  --color-brand-700: #C2410C;
+  --color-brand-800: #9A3412;
+  --color-brand-900: #7C2D12;
+
+  /* Accent scale — blue (matches --secondary #2563EB) */
+  --color-accent-300: #93C5FD;
+  --color-accent-400: #60A5FA;
+  --color-accent-500: #2563EB;
+  --color-accent-600: #1D4ED8;
+
+  /* Signal scale — red, used for risk and destructive affordances */
+  --color-signal-400: #F87171;
+  --color-signal-500: #EF4444;
+  --color-signal-600: #DC2626;
+
+  /* Violet + ink helpers referenced by the chart and studio modules */
+  --color-violet-500: #8B5CF6;
+  --color-ink-400: #94A3B8;
+
+  --fc-surface: #FFFFFF;
+  --fc-surface-2: #F8FAFC;
+  --fc-surface-3: #F1F5F9;
+  --fc-line: #E2E8F0;
+  --fc-line-strong: #CBD5E1;
+  --fc-fg: #0F172A;
+  --fc-fg-muted: #475569;
+  --fc-fg-subtle: #64748B;
+
+  --fc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --fc-shadow-md: 0 10px 30px -18px rgba(15, 23, 42, 0.25);
+}
+
+.dark {
+  --fc-surface: #0B1220;
+  --fc-surface-2: #0F172A;
+  --fc-surface-3: #1B2436;
+  --fc-line: #1E293B;
+  --fc-line-strong: #334155;
+  --fc-fg: #F8FAFC;
+  --fc-fg-muted: #CBD5E1;
+  --fc-fg-subtle: #94A3B8;
+
+  --fc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --fc-shadow-md: 0 16px 40px -24px rgba(0, 0, 0, 0.8);
+}
+
+.font-display {
+  font-family: var(--font-sans);
+  letter-spacing: -0.015em;
+}
+
+/* ---- Surfaces ------------------------------------------------------------ */
+
+.fc-card {
+  background: var(--fc-surface);
+  border: 1px solid var(--fc-line);
+  border-radius: 0.9rem;
+  box-shadow: var(--fc-shadow-sm);
+}
+
+.fc-card-hover {
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+.fc-card-hover:hover {
+  border-color: var(--color-brand-400);
+  box-shadow: var(--fc-shadow-md);
+  transform: translateY(-1px);
+}
+
+.fc-bg {
+  background:
+    radial-gradient(1100px 500px at 8% -10%, rgba(249, 115, 22, 0.10), transparent 60%),
+    radial-gradient(900px 460px at 92% 0%, rgba(37, 99, 235, 0.10), transparent 62%),
+    var(--fc-surface-2);
+}
+
+.fc-aurora {
+  position: relative;
+  overflow: hidden;
+}
+.fc-aurora::before {
+  content: "";
+  position: absolute;
+  inset: -40% -10% auto -10%;
+  height: 220px;
+  background: radial-gradient(closest-side, rgba(249, 115, 22, 0.22), transparent 70%);
+  pointer-events: none;
+}
+
+/* ---- Buttons ------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 0.6rem;
+  border: 1px solid var(--fc-line);
+  background: var(--fc-surface);
+  color: var(--fc-fg);
+  padding: 0.5rem 0.8rem;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease, transform 120ms ease;
+  white-space: nowrap;
+}
+.btn:hover {
+  border-color: var(--fc-line-strong);
+  background: var(--fc-surface-3);
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+}
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-primary {
+  background: var(--color-brand-500);
+  border-color: var(--color-brand-500);
+  color: #fff;
+}
+.btn-primary:hover {
+  background: var(--color-brand-600);
+  border-color: var(--color-brand-600);
+}
+
+.btn-secondary {
+  background: var(--color-accent-500);
+  border-color: var(--color-accent-500);
+  color: #fff;
+}
+.btn-secondary:hover {
+  background: var(--color-accent-600);
+  border-color: var(--color-accent-600);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--fc-fg-muted);
+}
+.btn-ghost:hover {
+  background: var(--fc-surface-3);
+  border-color: var(--fc-line);
+  color: var(--fc-fg);
+}
+
+.btn-danger {
+  background: var(--color-signal-500);
+  border-color: var(--color-signal-500);
+  color: #fff;
+}
+.btn-danger:hover {
+  background: var(--color-signal-600);
+  border-color: var(--color-signal-600);
+}
+
+.btn-sm {
+  padding: 0.32rem 0.6rem;
+  font-size: 11.5px;
+  border-radius: 0.5rem;
+}
+.btn-lg {
+  padding: 0.68rem 1.05rem;
+  font-size: 14px;
+  border-radius: 0.7rem;
+}
+.btn-icon {
+  padding: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: none;
+}
+.btn-sm.btn-icon {
+  width: 1.85rem;
+  height: 1.85rem;
+}
+
+/* ---- Form fields --------------------------------------------------------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.field > label,
+.field-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fc-fg-subtle);
+}
+.field input,
+.field select,
+.field textarea,
+.fc-input {
+  width: 100%;
+  border-radius: 0.55rem;
+  border: 1px solid var(--fc-line);
+  background: var(--fc-surface-2);
+  color: var(--fc-fg);
+  padding: 0.48rem 0.65rem;
+  font-size: 13px;
+  line-height: 1.4;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.field input::placeholder,
+.field textarea::placeholder,
+.fc-input::placeholder {
+  color: var(--fc-fg-subtle);
+}
+.field input:focus,
+.field select:focus,
+.field textarea:focus,
+.fc-input:focus {
+  outline: none;
+  border-color: var(--color-brand-400);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+}
+.field .hint {
+  font-size: 11.5px;
+  color: var(--fc-fg-subtle);
+}
+.field .error {
+  font-size: 11.5px;
+  color: var(--color-signal-500);
+}
+
+/* ---- Chips, tags, kbd ---------------------------------------------------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 9999px;
+  border: 1px solid var(--fc-line);
+  background: var(--fc-surface-2);
+  color: var(--fc-fg-muted);
+  padding: 0.18rem 0.55rem;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.chip-brand {
+  border-color: rgba(249, 115, 22, 0.35);
+  background: rgba(249, 115, 22, 0.12);
+  color: var(--color-brand-600);
+}
+.dark .chip-brand {
+  color: var(--color-brand-300);
+}
+
+/* ---- Scrollbars ---------------------------------------------------------- */
+
+.fc-scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--fc-line-strong) transparent;
+}
+.fc-scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.fc-scroll-thin::-webkit-scrollbar-thumb {
+  background: var(--fc-line-strong);
+  border-radius: 9999px;
+}
+.fc-scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---- Diagram / edge helpers --------------------------------------------- */
+
+.fc-edge {
+  stroke: var(--fc-line-strong);
+  stroke-width: 1.5;
+}
+.fc-diagram-preview {
+  background-image: radial-gradient(var(--fc-line-strong) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* ---- Motion -------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   Tailwind theme: the brand scales as first-class colour utilities.
+   Without this block, class names like bg-brand-50 or text-violet-700 compile to
+   nothing — which is exactly what happened to the marketing pages before.
+   -------------------------------------------------------------------------- */
+@theme {
+  --color-brand-50: #FFF7ED;
+  --color-brand-100: #FFEDD5;
+  --color-brand-200: #FED7AA;
+  --color-brand-300: #FDBA74;
+  --color-brand-400: #FB923C;
+  --color-brand-500: #F97316;
+  --color-brand-600: #EA580C;
+  --color-brand-700: #C2410C;
+  --color-brand-800: #9A3412;
+  --color-brand-900: #7C2D12;
+  --color-brand-950: #431407;
+
+  --color-accent-50: #EFF6FF;
+  --color-accent-100: #DBEAFE;
+  --color-accent-200: #BFDBFE;
+  --color-accent-300: #93C5FD;
+  --color-accent-400: #60A5FA;
+  --color-accent-500: #2563EB;
+  --color-accent-600: #1D4ED8;
+  --color-accent-700: #1E40AF;
+  --color-accent-800: #1E3A8A;
+  --color-accent-900: #172554;
+  --color-accent-950: #0B1736;
+
+  --color-signal-50: #FEF2F2;
+  --color-signal-100: #FEE2E2;
+  --color-signal-200: #FECACA;
+  --color-signal-300: #FCA5A5;
+  --color-signal-400: #F87171;
+  --color-signal-500: #EF4444;
+  --color-signal-600: #DC2626;
+  --color-signal-700: #B91C1C;
+  --color-signal-800: #991B1B;
+  --color-signal-900: #7F1D1D;
+  --color-signal-950: #450A0A;
+
+  --color-violet-50: #F5F3FF;
+  --color-violet-100: #EDE9FE;
+  --color-violet-200: #DDD6FE;
+  --color-violet-300: #C4B5FD;
+  --color-violet-400: #A78BFA;
+  --color-violet-500: #8B5CF6;
+  --color-violet-600: #7C3AED;
+  --color-violet-700: #6D28D9;
+  --color-violet-800: #5B21B6;
+  --color-violet-900: #4C1D95;
+  --color-violet-950: #2E1065;
+
+  --color-ink-100: #E2E8F0;
+  --color-ink-200: #CBD5E1;
+  --color-ink-300: #94A3B8;
+  --color-ink-400: #94A3B8;
+  --color-ink-500: #64748B;
+  --color-ink-600: #475569;
+  --color-ink-700: #334155;
+  --color-ink-800: #1E293B;
+  --color-ink-900: #0F172A;
+  --color-ink-950: #07091A;
+}

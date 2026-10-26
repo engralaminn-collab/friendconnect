@@ -42,6 +42,7 @@ import {
   BookMarked,
   Network,
   Wand2,
+  BrainCircuit,
 } from "lucide-react";
 
 export interface NavItem {
@@ -69,6 +70,19 @@ export const navGroups: NavGroup[] = [
         icon: LayoutDashboard,
         description: "Every module, one lens",
         keywords: "home overview metrics charts",
+      },
+    ],
+  },
+  {
+    id: "operator",
+    label: "Operator",
+    items: [
+      {
+        href: "/app/bill-agent",
+        label: "Bill Agent",
+        icon: BrainCircuit,
+        description: "One AI, every module, fully audited",
+        keywords: "agent ai operator automate ollama openrouter provider tools mcp control api bill",
       },
     ],
   },
