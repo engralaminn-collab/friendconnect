@@ -32,6 +32,9 @@ import {
   LayoutGrid,
   Truck,
   ScanText,
+  MessageCircle,
+  PhoneCall,
+  RadioTower,
 } from "lucide-react";
 
 export interface NavItem {
@@ -59,6 +62,33 @@ export const navGroups: NavGroup[] = [
         icon: LayoutDashboard,
         description: "Every module, one lens",
         keywords: "home overview metrics charts",
+      },
+    ],
+  },
+  {
+    id: "messaging",
+    label: "Messaging & Calls",
+    items: [
+      {
+        href: "/app/messenger",
+        label: "Messenger",
+        icon: MessageCircle,
+        description: "Private chat with every media type",
+        keywords: "whatsapp chat message media voice document image video emoji",
+      },
+      {
+        href: "/app/calls",
+        label: "Calls",
+        icon: PhoneCall,
+        description: "Audio and video with diagnostics",
+        keywords: "audio video call webrtc voip sip dialpad quality mos",
+      },
+      {
+        href: "/app/gateways",
+        label: "Gateways & bridges",
+        icon: RadioTower,
+        description: "SMS, ComfyUI, SIP and IPC",
+        keywords: "sms http api httpsms domovina comfyui sip webhook ipc bridge",
       },
     ],
   },

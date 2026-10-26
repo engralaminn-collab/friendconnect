@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   Check,
   CheckCheck,
@@ -90,6 +91,12 @@ export default function InboxPage() {
         eyebrow="Communication"
         title="Inbox"
         description="SMS, WhatsApp, email and VoIP threads in one list, with a shared unread count and per-thread context from the CRM."
+        actions={
+          <Link href="/app/messenger" className="btn btn-primary btn-sm">
+            <MessageSquare className="size-3.5" />
+            Open the full messenger
+          </Link>
+        }
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   Bell,
   Check,
@@ -18,6 +19,7 @@ import {
   Trash2,
   User,
   Webhook,
+  RadioTower,
 } from "lucide-react";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Modal } from "@/components/ui/Modal";
@@ -54,6 +56,7 @@ export default function SettingsPage() {
   const theme = useUI((s) => s.theme);
   const setTheme = useUI((s) => s.setTheme);
   const resetWorkspace = useStore((s) => s.resetWorkspace);
+  const gateways = useStore((s) => s.gateways);
   const toast = useToast();
 
   const [tab, setTab] = React.useState("profile");
@@ -364,6 +367,39 @@ export default function SettingsPage() {
                     </div>
                   );
                 })}
+              </div>
+
+              <div className="mt-6 rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-4">
+                <h3 className="flex items-center gap-2 text-[14px] font-semibold">
+                  <RadioTower className="size-4 text-[var(--color-accent-500)]" />
+                  Communication gateways
+                </h3>
+                <p className="mt-1 text-[12px] text-[var(--fc-fg-muted)]">
+                  SMS providers, the ComfyUI render queue, SIP signalling and the
+                  promise-based IPC bridge that the messenger runs on.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {gateways.map((g) => (
+                    <span
+                      key={g.id}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--fc-line)] bg-[var(--fc-surface)] px-2.5 py-1.5 text-[11.5px] font-semibold"
+                    >
+                      <span
+                        className={cn(
+                          "size-1.5 rounded-full",
+                          g.connected ? "bg-emerald-500" : "bg-[var(--fc-fg-subtle)]",
+                        )}
+                      />
+                      {g.name}
+                    </span>
+                  ))}
+                </div>
+                <Link
+                  href="/app/gateways"
+                  className="btn btn-secondary btn-sm mt-3"
+                >
+                  Manage gateways
+                </Link>
               </div>
 
               <div className="mt-6 rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-4">

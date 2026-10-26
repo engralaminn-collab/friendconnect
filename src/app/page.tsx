@@ -25,6 +25,13 @@ import {
   Globe2,
   LineChart,
   LayoutGrid,
+  MessageCircle,
+  PhoneCall,
+  RadioTower,
+  Mic,
+  Video,
+  FileText,
+  PhoneOff,
 } from "lucide-react";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
@@ -53,7 +60,7 @@ export default function HomePage() {
                     <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                     <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
                   </span>
-                  FriendConnect 2.0 — agents, studios and the marketing kit are live
+                  FriendConnect 2.0 — private messaging, calling and the marketing kit are live
                   <ArrowRight className="size-3.5" />
                 </span>
               </Reveal>
@@ -67,10 +74,11 @@ export default function HomePage() {
 
               <Reveal delay={0.12}>
                 <p className="mt-6 max-w-xl text-[1.05rem] leading-relaxed text-[var(--fc-fg-muted)]">
-                  CRM and pipeline, education consultancy, an AI marketing studio, a
-                  diagram designer, video and voice studios, a bounded agent builder,
-                  a knowledge base and a community feed — connected by one data
-                  layer, not seven tabs.
+                  A private messenger with real audio and video calls, CRM and
+                  pipeline, education consultancy, an AI marketing studio, a diagram
+                  designer, video and voice studios, a bounded agent builder, a
+                  knowledge base and a community feed — connected by one data layer,
+                  not ten tabs.
                 </p>
               </Reveal>
 
@@ -91,7 +99,7 @@ export default function HomePage() {
                 <ul className="mt-9 grid max-w-lg grid-cols-2 gap-x-6 gap-y-2.5 text-[13px] text-[var(--fc-fg-muted)]">
                   {[
                     "Runs entirely in your browser",
-                    "No seat-based pricing traps",
+                    "Private chat, audio and video calls",
                     "Every module shares one data layer",
                     "Open API and plugin marketplace",
                   ].map((f) => (
@@ -109,8 +117,8 @@ export default function HomePage() {
               <ProductMock />
               <div className="mt-4 grid grid-cols-3 gap-3 text-center">
                 {[
-                  { k: "28", v: "modules" },
-                  { k: "140+", v: "features" },
+                  { k: "37", v: "modules" },
+                  { k: "180+", v: "features" },
                   { k: "0", v: "setup calls" },
                 ].map((s) => (
                   <div
@@ -201,7 +209,7 @@ export default function HomePage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <Reveal className="mx-auto max-w-2xl text-center">
             <span className="chip border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-800 dark:bg-brand-950/60 dark:text-brand-300">
-              Seven pillars
+              Eight pillars
             </span>
             <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
               A platform, not a pile of tools
@@ -215,6 +223,13 @@ export default function HomePage() {
           </Reveal>
 
           <Stagger className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <FeatureTile
+              icon={MessageCircle}
+              title="Private messenger & calling"
+              desc="Threads with every media type, real WebRTC audio and video calls, voice notes, documents, polls, reactions and the SMS gateways underneath."
+              href="/features#messaging"
+              visual={<MessengerVisual />}
+            />
             <FeatureTile
               icon={KanbanSquare}
               title="Revenue pipeline"
@@ -272,6 +287,131 @@ export default function HomePage() {
               visual={<DashboardVisual />}
             />
           </Stagger>
+        </div>
+      </section>
+
+      {/* ==================== PRIVATE COMMUNICATION ==================== */}
+      <section id="communication" className="border-t border-[var(--fc-line)] bg-[var(--fc-surface)] py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <Reveal className="mx-auto max-w-2xl text-center">
+            <span className="chip border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-800 dark:bg-brand-950/60 dark:text-brand-300">
+              Private communication
+            </span>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
+              Chat, share everything, and <GradientText>call them</GradientText>
+            </h2>
+            <p className="mt-4 text-[var(--fc-fg-muted)]">
+              A messenger built for private conversations. Images, video, voice
+              notes, documents, polls, locations and contact cards — plus real
+              peer-to-peer audio and video calls with live network diagnostics.
+            </p>
+          </Reveal>
+
+          <div className="mt-14 grid items-center gap-12 lg:grid-cols-2">
+            <Reveal>
+              <ul className="space-y-5">
+                {[
+                  {
+                    icon: MessageCircle,
+                    t: "Every media type, one composer",
+                    d: "Images and video render inline. Voice notes get a live level meter and a waveform. Documents keep their size and type. Polls tally as people vote. Location and contact cards land as rich cards.",
+                  },
+                  {
+                    icon: PhoneCall,
+                    t: "Real WebRTC calling",
+                    d: "Audio and video calls negotiate SDP and ICE for real, then poll the peer connection for round trip time, jitter, packet loss and bitrate — turned into a MOS score you can actually read.",
+                  },
+                  {
+                    icon: RadioTower,
+                    t: "Gateways you control",
+                    d: "Send SMS with a single API key header, route inbound webhooks into the right conversation, queue a ComfyUI render and share the frame, and drive everything through a promise-based IPC bridge.",
+                  },
+                  {
+                    icon: Sparkles,
+                    t: "The CRM already knows them",
+                    d: "Lead score, campaign touchpoints and a next best action sit beside the thread, so the reply you send is informed by everything else in the workspace.",
+                  },
+                ].map((f) => (
+                  <li key={f.t} className="flex gap-4">
+                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[var(--color-brand-500)]/10 text-[var(--color-brand-500)]">
+                      <f.icon className="size-4.5" />
+                    </span>
+                    <div>
+                      <h3 className="text-[15px] font-semibold">{f.t}</h3>
+                      <p className="mt-1 text-[13.5px] leading-relaxed text-[var(--fc-fg-muted)]">
+                        {f.d}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link href="/app/messenger" className="btn btn-primary">
+                  Open the messenger
+                  <ArrowRight className="size-4" />
+                </Link>
+                <Link href="/app/calls" className="btn btn-secondary">
+                  <PhoneCall className="size-4" />
+                  Call hub
+                </Link>
+              </div>
+            </Reveal>
+
+            <Reveal delay={0.12}>
+              <div className="relative">
+                <div className="absolute -inset-4 -z-10 rounded-[2rem] bg-[radial-gradient(circle,rgba(20,184,166,.14),transparent_70%)] blur-2xl" />
+                <div className="fc-card overflow-hidden">
+                  <div className="flex items-center gap-2.5 border-b border-[var(--fc-line)] bg-[var(--fc-surface-2)] px-4 py-3">
+                    <span className="grid size-9 place-items-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 text-[12px] font-bold text-white">
+                      AO
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[13px] font-semibold">Amara Osei</div>
+                      <div className="text-[10.5px] text-emerald-500">online</div>
+                    </div>
+                    <PhoneCall className="size-4 text-[var(--fc-fg-muted)]" />
+                    <Video className="size-4 text-[var(--fc-fg-muted)]" />
+                  </div>
+                  <div className="relative aspect-[16/11] bg-[linear-gradient(140deg,#0c1226,#05070f)]">
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(59,100,246,.28),transparent_55%),radial-gradient(circle_at_75%_80%,rgba(20,184,166,.22),transparent_55%)]" />
+                    <div className="absolute left-4 top-4 rounded-lg border border-white/10 bg-black/55 px-2.5 py-2 backdrop-blur">
+                      <div className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-white/45">
+                        Network
+                      </div>
+                      <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10.5px] text-white/80">
+                        <span>MOS</span>
+                        <span className="font-bold text-emerald-400">4.4</span>
+                        <span>RTT</span>
+                        <span className="font-bold">34 ms</span>
+                        <span>Jitter</span>
+                        <span className="font-bold">4.1 ms</span>
+                        <span>Loss</span>
+                        <span className="font-bold">0.3%</span>
+                      </div>
+                    </div>
+                    <div className="absolute bottom-3 right-3 h-24 w-36 overflow-hidden rounded-lg border border-white/15 bg-gradient-to-br from-indigo-500/40 to-teal-500/30">
+                      <div className="grid h-full place-items-center text-[9.5px] text-white/60">
+                        You
+                      </div>
+                    </div>
+                    <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-2">
+                      {[Mic, Video, PhoneCall].map((I, i) => (
+                        <span
+                          key={i}
+                          className="grid size-9 place-items-center rounded-full bg-white/10 text-white backdrop-blur"
+                        >
+                          <I className="size-3.5" />
+                        </span>
+                      ))}
+                      <span className="grid size-10 place-items-center rounded-full bg-rose-500 text-white">
+                        <PhoneOff className="size-4" />
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+          </div>
         </div>
       </section>
 
@@ -687,6 +827,56 @@ export default function HomePage() {
 }
 
 /* =========================== Feature tile =========================== */
+
+function MessengerVisual() {
+  return (
+    <div className="flex h-full gap-2.5">
+      <div className="flex w-1/3 flex-col gap-1.5">
+        {[
+          { i: "AO", c: "bg-emerald-500/20", l: "Amara" },
+          { i: "SR", c: "bg-sky-500/20", l: "Samuel" },
+          { i: "MC", c: "bg-violet-500/20", l: "Maya" },
+          { i: "TD", c: "bg-amber-500/20", l: "Team" },
+        ].map((r) => (
+          <div
+            key={r.l}
+            className="flex items-center gap-1.5 rounded-lg border border-[var(--fc-line)] bg-[var(--fc-surface)] px-1.5 py-1.5"
+          >
+            <span className={`grid size-5 shrink-0 place-items-center rounded-full ${r.c} text-[8px] font-bold`}>
+              {r.i}
+            </span>
+            <span className="truncate text-[9.5px] font-semibold">{r.l}</span>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-1 flex-col gap-1.5 rounded-lg border border-[var(--fc-line)] bg-[var(--fc-surface)] p-2">
+        <div className="ml-auto max-w-[80%] rounded-lg rounded-br-sm bg-[var(--color-brand-500)] px-2 py-1 text-[9.5px] text-white">
+          Documents are attached and the timeline is confirmed.
+        </div>
+        <div className="max-w-[80%] rounded-lg rounded-bl-sm bg-[var(--fc-surface-3)] px-2 py-1 text-[9.5px]">
+          Perfect — I will call you about the visa slot at 4.
+        </div>
+        <div className="flex items-center gap-1.5 rounded-lg bg-[var(--fc-surface-3)] px-2 py-1.5">
+          <FileText className="size-3 shrink-0 text-[var(--color-brand-500)]" />
+          <span className="truncate text-[9px] font-semibold">checklist.pdf</span>
+          <span className="ml-auto text-[8px] text-[var(--fc-fg-subtle)]">1.2 MB</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
+          <span className="text-[9px] text-[var(--fc-fg-subtle)]">typing…</span>
+        </div>
+        <div className="mt-auto flex items-center gap-1.5 border-t border-[var(--fc-line)] pt-1.5">
+          <Mic className="size-3 text-[var(--fc-fg-subtle)]" />
+          <Video className="size-3 text-[var(--fc-fg-subtle)]" />
+          <PhoneCall className="size-3 text-emerald-500" />
+          <span className="ml-auto rounded bg-[var(--color-brand-500)] px-2 py-0.5 text-[8px] font-bold text-white">
+            Send
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function FeatureTile({
   icon: Icon,

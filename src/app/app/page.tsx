@@ -19,6 +19,9 @@ import {
   Target,
   TrendingUp,
   Users,
+  PhoneCall,
+  MessageCircle,
+  RadioTower,
 } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/app/PageHeader";
 import { useStore } from "@/store/useStore";
@@ -39,6 +42,7 @@ import {
   isOverdue,
   relativeTime,
   sum,
+  formatDuration,
 } from "@/lib/utils";
 import type { Stage } from "@/lib/types";
 
@@ -56,6 +60,8 @@ export default function DashboardPage() {
   const agentRuns = useStore((s) => s.agentRuns);
   const posts = useStore((s) => s.posts);
   const threads = useStore((s) => s.threads);
+  const calls = useStore((s) => s.calls);
+  const gatewayList = useStore((s) => s.gateways);
   const events = useStore((s) => s.events);
   const diagrams = useStore((s) => s.diagrams);
   const videos = useStore((s) => s.videos);
@@ -214,6 +220,126 @@ export default function DashboardPage() {
             ))}
           </div>
         </StatCard>
+      </div>
+
+      {/* ---------------- COMMUNICATIONS STRIP ---------------- */}
+      <div className="fc-card mt-4 overflow-hidden">
+        <div className="flex flex-wrap items-center gap-3 border-b border-[var(--fc-line)] bg-[var(--fc-surface-2)] px-5 py-3">
+          <span className="grid size-8 place-items-center rounded-lg bg-[var(--color-accent-500)]/12 text-[var(--color-accent-500)]">
+            <PhoneCall className="size-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[15px] font-semibold">Communication</h2>
+            <p className="text-[11.5px] text-[var(--fc-fg-subtle)]">
+              Private messaging, calling and the gateways underneath it
+            </p>
+          </div>
+          <Link href="/app/messenger" className="btn btn-secondary btn-sm">
+            <MessageCircle className="size-3.5" />
+            Messenger
+          </Link>
+          <Link href="/app/calls" className="btn btn-secondary btn-sm">
+            <PhoneCall className="size-3.5" />
+            Calls
+          </Link>
+          <Link href="/app/gateways" className="btn btn-secondary btn-sm">
+            <RadioTower className="size-3.5" />
+            Gateways
+          </Link>
+        </div>
+
+        <div className="grid gap-4 p-5 lg:grid-cols-[1.2fr_1fr]">
+          <div>
+            <div className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.13em] text-[var(--fc-fg-subtle)]">
+              Recent conversations
+            </div>
+            <ul className="space-y-1.5">
+              {threads.slice(0, 4).map((t) => {
+                const last = t.messages[t.messages.length - 1];
+                return (
+                  <li key={t.id}>
+                    <Link
+                      href="/app/messenger"
+                      className="flex items-center gap-3 rounded-lg border border-[var(--fc-line)] px-3 py-2 transition-colors hover:bg-[var(--fc-surface-2)]"
+                    >
+                      <Avatar name={t.contactName} hue={t.avatarHue ?? 226} size={30} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate text-[12.5px] font-semibold">
+                            {t.contactName}
+                          </span>
+                          {t.verified && <Badge tone="success">verified</Badge>}
+                          {t.unread > 0 && (
+                            <span className="ml-auto grid size-[16px] place-items-center rounded-full bg-[var(--color-brand-500)] text-[9px] font-bold text-white">
+                              {t.unread}
+                            </span>
+                          )}
+                        </div>
+                        <div className="truncate text-[11px] text-[var(--fc-fg-muted)]">
+                          {last?.media?.caption ?? last?.body ?? "No messages"}
+                        </div>
+                      </div>
+                      <Badge tone={t.channel === "whatsapp" ? "brand" : "neutral"}>
+                        {t.channel}
+                      </Badge>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <div className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.13em] text-[var(--fc-fg-subtle)]">
+                Recent calls
+              </div>
+              <ul className="space-y-1.5">
+                {calls.slice(0, 3).map((c) => (
+                  <li
+                    key={c.id}
+                    className="flex items-center gap-2.5 rounded-lg border border-[var(--fc-line)] px-3 py-2"
+                  >
+                    <PhoneCall className="size-3.5 shrink-0 text-[var(--fc-fg-subtle)]" />
+                    <span className="min-w-0 flex-1 truncate text-[12px] font-semibold">
+                      {c.contactName}
+                    </span>
+                    <span className="text-[11px] tabular-nums text-[var(--fc-fg-subtle)]">
+                      {formatDuration(c.durationSec)}
+                    </span>
+                    <Badge
+                      tone={c.quality.mos >= 4 ? "success" : c.quality.mos >= 3 ? "signal" : "danger"}
+                    >
+                      MOS {c.quality.mos.toFixed(1)}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div>
+              <div className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.13em] text-[var(--fc-fg-subtle)]">
+                Gateways
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {gatewayList.map((g) => (
+                  <span
+                    key={g.id}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--fc-line)] px-2.5 py-1 text-[11px] font-semibold"
+                  >
+                    <span
+                      className={cn(
+                        "size-1.5 rounded-full",
+                        g.connected ? "bg-emerald-500" : "bg-[var(--fc-fg-subtle)]",
+                      )}
+                    />
+                    {g.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ---------------- CHARTS ROW ---------------- */}

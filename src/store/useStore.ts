@@ -8,6 +8,10 @@ import type {
   AgentRun,
   ApiDefinition,
   Application,
+  CallRecord,
+  DeviceProfile,
+  GatewayConfig,
+  MediaAttachment,
   Article,
   Campaign,
   Company,
@@ -67,7 +71,14 @@ import {
   seedVoiceClips,
 } from "@/lib/data/studio";
 import { seedApis, seedNotes, seedPlugins, seedWikiPages } from "@/lib/data/knowledge";
-import { seedEvents, seedPosts, seedThreads } from "@/lib/data/community";
+import { seedEvents, seedPosts } from "@/lib/data/community";
+import {
+  seedCallRecords,
+  seedChatMessages,
+  seedChatThreads,
+  seedDevices,
+  seedGateways,
+} from "@/lib/data/messaging";
 
 export interface AppState {
   /* ---------- CRM ---------- */
@@ -102,6 +113,9 @@ export interface AppState {
   apis: ApiDefinition[];
   /* ---------- Community ---------- */
   threads: Thread[];
+  calls: CallRecord[];
+  devices: DeviceProfile[];
+  gateways: GatewayConfig[];
   posts: Post[];
   events: EventItem[];
   notifications: Notification[];
@@ -169,8 +183,21 @@ export interface AppState {
   addPost: (post: Omit<Post, "id" | "createdAt" | "likes" | "comments">) => Post;
   addEvent: (event: Omit<EventItem, "id">) => EventItem;
   toggleLike: (id: ID) => void;
-  sendMessage: (threadId: ID, body: string) => void;
+  sendMessage: (threadId: ID, body: string, media?: MediaAttachment) => void;
+  editMessage: (threadId: ID, messageId: ID, body: string) => void;
+  deleteMessage: (threadId: ID, messageId: ID) => void;
+  toggleMessageStar: (threadId: ID, messageId: ID) => void;
+  reactToMessage: (threadId: ID, messageId: ID, emoji: string) => void;
+  votePoll: (threadId: ID, messageId: ID, optionIndex: number) => void;
+  toggleThreadPin: (threadId: ID) => void;
+  toggleThreadArchive: (threadId: ID) => void;
+  toggleThreadMute: (threadId: ID) => void;
+  setThreadTyping: (threadId: ID, typing: boolean) => void;
   markThreadRead: (id: ID) => void;
+  addCall: (call: Omit<CallRecord, "id">) => CallRecord;
+  setDefaultDevice: (id: ID) => void;
+  toggleGateway: (id: ID) => void;
+  updateGateway: (id: ID, patch: Partial<GatewayConfig>) => void;
   createThread: (thread: Omit<Thread, "id" | "updatedAt" | "unread" | "messages">) => Thread;
   markNotificationRead: (id: ID) => void;
   markAllNotificationsRead: () => void;
@@ -205,7 +232,13 @@ const initialState = {
   wikiPages: seedWikiPages,
   plugins: seedPlugins,
   apis: seedApis,
-  threads: seedThreads,
+  threads: seedChatThreads.map((t) => ({
+    ...t,
+    messages: seedChatMessages[t.id] ?? [],
+  })),
+  calls: seedCallRecords,
+  devices: seedDevices,
+  gateways: seedGateways,
   posts: seedPosts,
   events: seedEvents,
   notifications: seedNotifications,
@@ -537,30 +570,205 @@ export const useStore = create<AppState>()(
         set((s) => ({ events: [...s.events, created] }));
         return created;
       },
-      sendMessage: (threadId, body) =>
+      markThreadRead: (id) =>
+        set((s) => ({
+          threads: s.threads.map((t) => (t.id === id ? { ...t, unread: 0 } : t)),
+        })),
+      sendMessage: (threadId, body, media) =>
         set((s) => ({
           threads: s.threads.map((t) =>
             t.id === threadId
               ? {
                   ...t,
                   updatedAt: new Date().toISOString(),
+                  status: "open" as const,
                   messages: [
                     ...t.messages,
                     {
-                      id: uid("msg"),
+                      id: uid("m"),
                       from: "me" as const,
                       body,
                       at: new Date().toISOString(),
                       status: "sent" as const,
+                      kind: media
+                        ? (media.kind === "voice"
+                          ? ("audio" as const)
+                          : media.kind === "location"
+                          ? ("location" as const)
+                          : media.kind === "contact"
+                          ? ("contact" as const)
+                          : (media.kind as Message["kind"]))
+                        : ("text" as const),
+                      media,
                     },
                   ],
                 }
               : t,
           ),
         })),
-      markThreadRead: (id) =>
+      editMessage: (threadId, messageId, body) =>
         set((s) => ({
-          threads: s.threads.map((t) => (t.id === id ? { ...t, unread: 0 } : t)),
+          threads: s.threads.map((t) =>
+            t.id === threadId
+              ? {
+                  ...t,
+                  messages: t.messages.map((m) =>
+                    m.id === messageId ? { ...m, body, edited: true } : m,
+                  ),
+                }
+              : t,
+          ),
+        })),
+      deleteMessage: (threadId, messageId) =>
+        set((s) => ({
+          threads: s.threads.map((t) =>
+            t.id === threadId
+              ? {
+                  ...t,
+                  messages: t.messages.map((m) =>
+                    m.id === messageId
+                      ? {
+                          ...m,
+                          deleted: true,
+                          body: "",
+                          media: undefined,
+                          kind: "system",
+                          systemKind: "changed",
+                        }
+                      : m,
+                  ),
+                }
+              : t,
+          ),
+        })),
+      toggleMessageStar: (threadId, messageId) =>
+        set((s) => ({
+          threads: s.threads.map((t) =>
+            t.id === threadId
+              ? {
+                  ...t,
+                  messages: t.messages.map((m) =>
+                    m.id === messageId ? { ...m, starred: !m.starred } : m,
+                  ),
+                }
+              : t,
+          ),
+        })),
+      reactToMessage: (threadId, messageId, emoji) =>
+        set((s) => ({
+          threads: s.threads.map((t) =>
+            t.id === threadId
+              ? {
+                  ...t,
+                  messages: t.messages.map((m) => {
+                    if (m.id !== messageId) return m;
+                    const reactions = [...(m.reactions ?? [])];
+                    const idx = reactions.findIndex((r) => r.emoji === emoji);
+                    if (idx >= 0) {
+                      const r = reactions[idx];
+                      if (r.mine) {
+                        if (r.count <= 1) reactions.splice(idx, 1);
+                        else
+                          reactions[idx] = {
+                            ...r,
+                            count: r.count - 1,
+                            mine: false,
+                          };
+                      } else {
+                        reactions[idx] = { ...r, count: r.count + 1, mine: true };
+                      }
+                    } else {
+                      reactions.push({ emoji, count: 1, mine: true });
+                    }
+                    return { ...m, reactions };
+                  }),
+                }
+              : t,
+          ),
+        })),
+      votePoll: (threadId, messageId, optionIndex) =>
+        set((s) => ({
+          threads: s.threads.map((t) =>
+            t.id === threadId
+              ? {
+                  ...t,
+                  messages: t.messages.map((m) => {
+                    if (m.id !== messageId || !m.media?.poll) return m;
+                    const poll = { ...m.media.poll, options: [...m.media.poll.options] };
+                    const previous = poll.myOption;
+                    if (previous !== undefined && previous !== optionIndex) {
+                      poll.options[previous].votes = Math.max(
+                        0,
+                        poll.options[previous].votes - 1,
+                      );
+                      poll.totalVotes = Math.max(0, poll.totalVotes - 1);
+                    }
+                    if (previous === optionIndex) {
+                      poll.options[optionIndex].votes = Math.max(
+                        0,
+                        poll.options[optionIndex].votes - 1,
+                      );
+                      poll.totalVotes = Math.max(0, poll.totalVotes - 1);
+                      poll.myOption = undefined;
+                    } else {
+                      poll.options[optionIndex].votes += 1;
+                      poll.totalVotes += 1;
+                      poll.myOption = optionIndex;
+                    }
+                    return { ...m, media: { ...m.media, poll } };
+                  }),
+                }
+              : t,
+          ),
+        })),
+      toggleThreadPin: (threadId) =>
+        set((s) => ({
+          threads: s.threads.map((t) =>
+            t.id === threadId ? { ...t, pinned: !t.pinned } : t,
+          ),
+        })),
+      toggleThreadArchive: (threadId) =>
+        set((s) => ({
+          threads: s.threads.map((t) =>
+            t.id === threadId ? { ...t, archived: !t.archived } : t,
+          ),
+        })),
+      toggleThreadMute: (threadId) =>
+        set((s) => ({
+          threads: s.threads.map((t) =>
+            t.id === threadId ? { ...t, muted: !t.muted } : t,
+          ),
+        })),
+      setThreadTyping: (threadId, typing) =>
+        set((s) => ({
+          threads: s.threads.map((t) =>
+            t.id === threadId ? { ...t, typing } : t,
+          ),
+        })),
+      addCall: (call) => {
+        const created: CallRecord = { ...call, id: uid("cl") };
+        set((s) => ({ calls: [created, ...s.calls] }));
+        return created;
+      },
+      setDefaultDevice: (id) =>
+        set((s) => ({
+          devices: s.devices.map((d) => ({ ...d, default: d.id === id })),
+        })),
+      toggleGateway: (id) =>
+        set((s) => ({
+          gateways: s.gateways.map((g) =>
+            g.id === id
+              ? {
+                  ...g,
+                  connected: !g.connected,
+                  lastSync: !g.connected ? new Date().toISOString() : g.lastSync,
+                }
+              : g,
+          ),
+        })),
+      updateGateway: (id, patch) =>
+        set((s) => ({
+          gateways: s.gateways.map((g) => (g.id === id ? { ...g, ...patch } : g)),
         })),
       createThread: (thread) => {
         const created: Thread = {

@@ -355,15 +355,69 @@ export interface ApiDefinition {
   tags: string[];
 }
 
-export interface Thread {
-  id: ID;
-  channel: "sms" | "whatsapp" | "voip" | "email";
-  contactName: string;
-  contactId?: ID;
-  messages: Message[];
-  unread: number;
-  updatedAt: string;
-  status: "open" | "waiting" | "resolved";
+/* ------------------------------------------------------------------ */
+/* Private messaging                                                    */
+/* ------------------------------------------------------------------ */
+
+export type MessageKind =
+  | "text"
+  | "image"
+  | "video"
+  | "audio"
+  | "document"
+  | "location"
+  | "poll"
+  | "contact"
+  | "system";
+
+export interface PollOption {
+  label: string;
+  votes: number;
+}
+
+export interface MediaAttachment {
+  kind:
+    | "image"
+    | "video"
+    | "audio"
+    | "voice"
+    | "document"
+    | "location"
+    | "contact"
+    | "poll";
+  name: string;
+  sizeLabel: string;
+  mime: string;
+  /** Deterministic artwork seed — renders offline with no stored bytes. */
+  seed?: string;
+  /** Audio and voice note runtime in seconds. */
+  durationSec?: number;
+  /** Video resolution label, e.g. "1080p". */
+  resolution?: string;
+  /** Video or image dimensions. */
+  width?: number;
+  height?: number;
+  /** Location payload. */
+  lat?: number;
+  lng?: number;
+  address?: string;
+  /** Poll payload. */
+  poll?: {
+    question: string;
+    options: PollOption[];
+    totalVotes: number;
+    myOption?: number;
+  };
+  /** Shared contact card. */
+  contactCard?: { name: string; phone: string; company?: string };
+  /** Caption typed alongside the media. */
+  caption?: string;
+}
+
+export interface Reaction {
+  emoji: string;
+  count: number;
+  mine: boolean;
 }
 
 export interface Message {
@@ -373,6 +427,115 @@ export interface Message {
   at: string;
   status?: "sent" | "delivered" | "read" | "failed";
   attachment?: string;
+  /** Defaults to "text" when omitted. */
+  kind?: MessageKind;
+  media?: MediaAttachment;
+  replyTo?: ID;
+  reactions?: Reaction[];
+  edited?: boolean;
+  forwarded?: boolean;
+  starred?: boolean;
+  deleted?: boolean;
+  /** Delivery latency in seconds, shown next to the tick. */
+  latencySec?: number;
+  /** System message kind: added, left, call, media, changed, security. */
+  systemKind?: "added" | "left" | "call" | "media" | "changed" | "security";
+}
+
+export interface Thread {
+  id: ID;
+  channel: "sms" | "whatsapp" | "voip" | "email";
+  contactName: string;
+  contactId?: ID;
+  messages: Message[];
+  unread: number;
+  updatedAt: string;
+  status: "open" | "waiting" | "resolved";
+  avatarHue?: number;
+  about?: string;
+  phone?: string;
+  email?: string;
+  pinned?: boolean;
+  archived?: boolean;
+  muted?: boolean;
+  isOnline?: boolean;
+  lastSeen?: string;
+  typing?: boolean;
+  /** Wallpaper seed for the chat background. */
+  wallpaper?: string;
+  labels?: string[];
+  verified?: boolean;
+  business?: boolean;
+  /** Disappearing-message timer in seconds. 0 disables it. */
+  disappearing?: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* Calling                                                              */
+/* ------------------------------------------------------------------ */
+
+export interface CallQuality {
+  rttMs: number;
+  jitterMs: number;
+  lossPct: number;
+  bitrateKbps: number;
+  mos: number;
+  codec: string;
+}
+
+export interface CallRecord {
+  id: ID;
+  contactName: string;
+  contactId?: ID;
+  direction: "incoming" | "outgoing" | "missed";
+  kind: "audio" | "video";
+  startedAt: string;
+  durationSec: number;
+  status: "completed" | "missed" | "declined" | "failed";
+  quality: CallQuality;
+  recording: boolean;
+}
+
+export interface DeviceProfile {
+  id: ID;
+  label: string;
+  kind: "microphone" | "camera" | "speaker";
+  default: boolean;
+}
+
+/* ------------------------------------------------------------------ */
+/* Gateways and bridges                                                 */
+/* ------------------------------------------------------------------ */
+
+export type GatewayProvider =
+  | "httpsms"
+  | "domovina"
+  | "comfyui"
+  | "sip"
+  | "webhook";
+
+export interface GatewayConfig {
+  id: ID;
+  name: string;
+  provider: GatewayProvider;
+  description: string;
+  baseUrl: string;
+  authHeader: string;
+  connected: boolean;
+  capabilities: string[];
+  lastSync?: string;
+  monthlyVolume: number;
+  /** Provider-specific settings. */
+  settings: Record<string, string>;
+}
+
+export interface IpcChannel {
+  name: string;
+  direction: "invoke" | "emit" | "subscribe";
+  description: string;
+  calls: number;
+  lastLatencyMs: number;
+  lastError?: string;
 }
 
 export interface Post {

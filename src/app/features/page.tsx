@@ -26,6 +26,9 @@ import {
   Truck,
   ScanText,
   LayoutGrid,
+  MessageCircle,
+  PhoneCall,
+  RadioTower,
 } from "lucide-react";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
@@ -35,7 +38,7 @@ import { Badge } from "@/components/ui/primitives";
 export const metadata: Metadata = {
   title: "Features",
   description:
-    "Seven pillars, thirty-four modules: revenue, education consultancy, AI marketing, creative studios, agents, knowledge systems, community and operational insight.",
+    "Eight pillars, thirty-seven modules: private messaging and calling, revenue, education consultancy, AI marketing, creative studios, agents, knowledge systems and operational insight.",
 };
 
 interface Feature {
@@ -46,6 +49,51 @@ interface Feature {
 }
 
 const pillars: { id: string; title: string; accent: string; lead: string; features: Feature[] }[] = [
+  {
+    id: "messaging",
+    title: "Private messaging & calling",
+    accent: "var(--color-accent-500)",
+    lead: "A private communication workspace in the same shape as the tools people already trust: threads, media of every kind, real audio and video calls, and the gateways that carry them.",
+    features: [
+      {
+        icon: MessageCircle,
+        name: "Messenger",
+        blurb: "Threads on four channels with every media type — images, video, voice notes, documents, polls, locations and contact cards.",
+        points: [
+          "Real WebRTC audio and video calls with mute, camera flip and screen share",
+          "Reply quotes, reactions, starred messages, polls with live vote counts",
+          "Voice-note recorder with a live level meter and one-tap send",
+          "Emoji picker, attachment menu and per-thread search",
+          "Pin, mute, archive and read receipts on every conversation",
+          "AI marketing CRM panel with lead score and next best action",
+        ],
+      },
+      {
+        icon: PhoneCall,
+        name: "Calls",
+        blurb: "A dialpad, call history and packet-level diagnostics on every conversation you have.",
+        points: [
+          "Twelve-key dialpad with a live number preview",
+          "Call history with direction, duration and outcome",
+          "Round trip, jitter, packet loss and a MOS estimate per call",
+          "Microphone, camera and speaker profiles with a saved default",
+          "Quality trends over time for MOS and latency",
+        ],
+      },
+      {
+        icon: RadioTower,
+        name: "Gateways & bridges",
+        blurb: "The plumbing — SMS over plain HTTP, an agent-ready SMS gateway, a ComfyUI render queue, SIP signalling and a promise-based IPC bridge.",
+        points: [
+          "Send SMS with one API key header and a three-field JSON body",
+          "cURL, Node SDK and raw JSON previews of the exact request",
+          "Inbound webhook routing with signature checks and retry rules",
+          "Queue a ComfyUI workflow and share the render straight into a chat",
+          "Promise-based IPC bridge with per-channel latency and error stats",
+        ],
+      },
+    ],
+  },
   {
     id: "crm",
     title: "Revenue operations",
@@ -400,7 +448,7 @@ export default function FeaturesPage() {
         <div className="relative mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
           <Reveal className="mx-auto max-w-3xl text-center">
             <span className="chip border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-800 dark:bg-brand-950/60 dark:text-brand-300">
-              34 modules · 7 pillars
+              37 modules · 8 pillars
             </span>
             <h1 className="mt-5 text-4xl font-bold tracking-tight sm:text-5xl">
               Everything below ships in <GradientText>every plan</GradientText>
