@@ -22,6 +22,7 @@ import {
   RadioTower,
 } from "lucide-react";
 import { PageHeader } from "@/components/app/PageHeader";
+import { DataMigrationPanel } from "@/components/settings/DataMigrationPanel";
 import { Modal } from "@/components/ui/Modal";
 import { Avatar, Badge, Toggle } from "@/components/ui/primitives";
 import { useStore } from "@/store/useStore";
@@ -622,10 +623,15 @@ export default function SettingsPage() {
           {/* ---------------- Data ---------------- */}
           {tab === "data" && (
             <div className="space-y-4">
+              {/* Server-authoritative data controls: backup download, legacy
+                  localStorage import, and an explicitly confirmed local reset. */}
+              <DataMigrationPanel />
+
               <div className="fc-card p-6">
-                <h2 className="text-[17px] font-semibold">Your data</h2>
+                <h2 className="text-[17px] font-semibold">This browser</h2>
                 <p className="mt-1 text-[13px] text-[var(--fc-fg-muted)]">
-                  Everything lives in this browser. Export it, or wipe it.
+                  What is still cached on this device. Server data lives in your
+                  account — use the backup panel above to export it.
                 </p>
 
                 <div className="mt-5 flex flex-wrap gap-2">
@@ -665,7 +671,8 @@ export default function SettingsPage() {
                 <ul className="mt-3 space-y-2.5 text-[13px] leading-relaxed text-[var(--fc-fg-muted)]">
                   {[
                     "No cookies, no tracking pixels, no third-party analytics.",
-                    "All workspace data is stored in localStorage on this device only.",
+                    "Messages, contacts and media live on your own server — this browser only keeps a cache.",
+                    "You are invisible to everyone until you accept their connection request.",
                     "Exports are plain JSON you can read, diff and archive.",
                     "Signing out clears the session; it never sends your data anywhere.",
                   ].map((r) => (
