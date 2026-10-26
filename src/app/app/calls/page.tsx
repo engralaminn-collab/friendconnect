@@ -38,6 +38,7 @@ import { Badge, EmptyState, Progress } from "@/components/ui/primitives";
 import { AreaChart, BarChart } from "@/components/charts";
 import { CallOverlay } from "@/components/messaging/CallOverlay";
 import { useStore } from "@/store/useStore";
+import { useMessenger } from "@/store/useMessenger";
 import { useToast } from "@/store/useUI";
 import { cn, formatDuration, relativeTime } from "@/lib/utils";
 import { CallEngine } from "@/lib/webrtc";
@@ -47,10 +48,11 @@ import type { CallRecord } from "@/lib/types";
 const KEYS = ["1","2","3","4","5","6","7","8","9","*","0","#"];
 
 export default function CallsPage() {
-  const calls = useStore((s) => s.calls);
+  // Real call history: populated by actual messenger/global calls.
+  const calls = useMessenger((s) => s.calls);
+  const addCall = useMessenger((s) => s.addCall);
   const devices = useStore((s) => s.devices);
   const setDefaultDevice = useStore((s) => s.setDefaultDevice);
-  const addCall = useStore((s) => s.addCall);
   const toast = useToast();
 
   const [dialed, setDialed] = React.useState("");
@@ -94,6 +96,8 @@ export default function CallsPage() {
 
   const endCall = (seconds: number) => {
     if (!call) return;
+    // Real statistics from the loopback peer connection — never fabricated.
+    const q = call.engine.current.quality;
     addCall({
       contactName: call.name,
       direction: "outgoing",
@@ -102,14 +106,7 @@ export default function CallsPage() {
       durationSec: seconds,
       status: "completed",
       recording: false,
-      quality: {
-        rttMs: 38,
-        jitterMs: 4.4,
-        lossPct: 0.3,
-        bitrateKbps: call.kind === "video" ? 1210 : 32,
-        mos: 4.4,
-        codec: call.kind === "video" ? "VP9 / Opus" : "Opus",
-      },
+      quality: q,
     });
     setCall(null);
   };
@@ -201,7 +198,11 @@ export default function CallsPage() {
       <div className="mt-4 grid gap-4 xl:grid-cols-[320px_1fr_300px]">
         {/* ---------------- Dialpad ---------------- */}
         <aside className="fc-card h-fit p-5">
-          <h2 className="text-[15px] font-semibold">Dialpad</h2>
+          <h2 className="text-[15px] font-semibold">Device test dialpad</h2>
+          <p className="mt-1 text-[11.5px] text-[var(--fc-fg-subtle)]">
+            Local loopback call to verify microphone, camera and network stats on this device.
+            Real person-to-person calls start from a conversation in the Messenger.
+          </p>
           <div className="mt-4 rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] px-3 py-3 text-center">
             <div className="truncate font-mono text-[20px] tabular-nums">
               {dialed || "—"}

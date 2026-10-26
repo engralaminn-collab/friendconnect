@@ -15,3 +15,10 @@ yarn-error.log*
 next-env.d.ts
 tsconfig.tsbuildinfo
 *.tsbuildinfo
+
+# Local private media storage (never commit user uploads)
+.private-media/
+# Built custom server
+dist/
+# Test artifacts
+test-results/

@@ -33,6 +33,11 @@ import type { Message, Thread } from "@/lib/types";
 
 const EMOJI_SETS = ["👍", "❤️", "😂", "🙏", "🔥", "🎉"];
 
+/** Real uploaded media is served from the private media API (cookie-authed). */
+export function isRealMediaUrl(seed?: string): boolean {
+  return Boolean(seed && seed.startsWith("/api/media/"));
+}
+
 function docIcon(mime: string) {
   if (mime.includes("pdf")) return FileText;
   if (mime.includes("sheet") || mime.includes("excel") || mime.includes("csv"))
@@ -111,11 +116,20 @@ export function ChatBubble({
             onClick={() => onOpenMedia(message)}
             className="group relative block w-full overflow-hidden rounded-xl"
           >
-            <GeneratedArt
-              seed={m.seed ?? m.name}
-              className="aspect-[4/3] w-full transition-transform duration-500 group-hover:scale-[1.03]"
-              label={m.caption ?? m.name}
-            />
+            {isRealMediaUrl(m.seed) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={m.seed}
+                alt={m.caption ?? m.name}
+                className="aspect-[4/3] w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+              />
+            ) : (
+              <GeneratedArt
+                seed={m.seed ?? m.name}
+                className="aspect-[4/3] w-full transition-transform duration-500 group-hover:scale-[1.03]"
+                label={m.caption ?? m.name}
+              />
+            )}
             <span className="absolute bottom-2 right-2 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
               {m.sizeLabel}
             </span>
@@ -129,11 +143,20 @@ export function ChatBubble({
             onClick={() => onOpenMedia(message)}
             className="group relative block w-full overflow-hidden rounded-xl"
           >
-            <GeneratedArt
-              seed={m.seed ?? m.name}
-              className="aspect-video w-full transition-transform duration-500 group-hover:scale-[1.03]"
-              label={m.caption ?? m.name}
-            />
+            {isRealMediaUrl(m.seed) ? (
+              <video
+                src={m.seed}
+                className="aspect-video w-full object-cover"
+                preload="metadata"
+                playsInline
+              />
+            ) : (
+              <GeneratedArt
+                seed={m.seed ?? m.name}
+                className="aspect-video w-full transition-transform duration-500 group-hover:scale-[1.03]"
+                label={m.caption ?? m.name}
+              />
+            )}
             <span className="absolute inset-0 grid place-items-center">
               <span className="grid size-12 place-items-center rounded-full bg-black/45 backdrop-blur transition-transform group-hover:scale-110">
                 <Play className="size-5 fill-white text-white" />
@@ -155,19 +178,23 @@ export function ChatBubble({
               <Mic className="size-4" />
             </span>
             <div className="min-w-0 flex-1">
-              <div className="flex h-6 items-end gap-[2px]">
-                {Array.from({ length: 28 }).map((_, i) => {
-                  const seed = (i * 37 + (m.seed?.length ?? 0) * 7) % 100;
-                  const h = 4 + (seed % 18);
-                  return (
-                    <span
-                      key={i}
-                      className="w-[2px] rounded-full bg-[var(--color-brand-500)]/70"
-                      style={{ height: `${h}px` }}
-                    />
-                  );
-                })}
-              </div>
+              {isRealMediaUrl(m.seed) ? (
+                <audio src={m.seed} controls className="w-full" preload="metadata" />
+              ) : (
+                <div className="flex h-6 items-end gap-[2px]">
+                  {Array.from({ length: 28 }).map((_, i) => {
+                    const seed = (i * 37 + (m.seed?.length ?? 0) * 7) % 100;
+                    const h = 4 + (seed % 18);
+                    return (
+                      <span
+                        key={i}
+                        className="w-[2px] rounded-full bg-[var(--color-brand-500)]/70"
+                        style={{ height: `${h}px` }}
+                      />
+                    );
+                  })}
+                </div>
+              )}
               <div className="mt-1 flex items-center gap-2 text-[10.5px] text-[var(--fc-fg-subtle)]">
                 <span>{formatDuration(m.durationSec ?? 0)}</span>
                 <span>·</span>
@@ -187,23 +214,37 @@ export function ChatBubble({
 
       case "document": {
         const Icon = docIcon(m.mime);
-        return (
-          <button
-            onClick={() => onOpenMedia(message)}
-            className="flex min-w-[220px] items-center gap-3 rounded-xl bg-[var(--fc-surface-3)] px-3 py-2.5 text-left transition-colors hover:bg-[var(--fc-surface-2)]"
-          >
+        const inner = (
+          <>
             <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-[var(--color-brand-500)]/12 text-[var(--color-brand-500)]">
               <Icon className="size-4.5" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-semibold">
-                {m.name}
-              </span>
+              <span className="block truncate text-[13px] font-semibold">{m.name}</span>
               <span className="block text-[11px] text-[var(--fc-fg-subtle)]">
                 {m.sizeLabel} · {m.mime.split("/")[1]?.toUpperCase() ?? "FILE"}
               </span>
             </span>
             <Download className="size-4 shrink-0 text-[var(--fc-fg-subtle)]" />
+          </>
+        );
+        if (isRealMediaUrl(m.seed)) {
+          return (
+            <a
+              href={m.seed}
+              download={m.name}
+              className="flex min-w-[220px] items-center gap-3 rounded-xl bg-[var(--fc-surface-3)] px-3 py-2.5 text-left transition-colors hover:bg-[var(--fc-surface-2)]"
+            >
+              {inner}
+            </a>
+          );
+        }
+        return (
+          <button
+            onClick={() => onOpenMedia(message)}
+            className="flex min-w-[220px] items-center gap-3 rounded-xl bg-[var(--fc-surface-3)] px-3 py-2.5 text-left transition-colors hover:bg-[var(--fc-surface-2)]"
+          >
+            {inner}
           </button>
         );
       }

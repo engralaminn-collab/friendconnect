@@ -445,6 +445,8 @@ export interface Message {
 export interface Thread {
   id: ID;
   channel: "sms" | "whatsapp" | "voip" | "email";
+  /** Server conversation type; direct 1:1 or group. */
+  type?: "direct" | "group";
   contactName: string;
   contactId?: ID;
   messages: Message[];
@@ -593,6 +595,8 @@ export interface SavedMessage {
   at: string;
   note: string;
   tag: "important" | "reference" | "todo" | "attachment";
+  /** Set when saved from a real persisted message. */
+  messageId?: ID;
 }
 
 export interface ThreadReply {

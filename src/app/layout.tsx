@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "@/components/ui/Toaster";
 import { CommandPalette } from "@/components/app/CommandPalette";
+import { AuthProvider } from "@/components/auth/AuthProvider";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://friendconnect.app"),
@@ -54,7 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to content
         </a>
-        {children}
+        <AuthProvider>{children}</AuthProvider>
         <Toaster />
         <CommandPalette />
       </body>
