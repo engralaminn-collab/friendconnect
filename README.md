@@ -29,7 +29,13 @@ npm start           # production server on 0.0.0.0:3000
 
 ## What is in it
 
-**42 workspace modules across 9 pillars**, plus a 9-page public marketing site.
+**44 module routes across 10 pillars**, one AI operator that can drive all of them,
+plus a public marketing site.
+
+### Operator
+| Module | What it does |
+| --- | --- |
+| `/app/bill-agent` | **Bill Agent**, the one AI that operates the workspace — 55 validated tools across CRM, education, marketing, knowledge, messaging, studios and community. Seven tabs: **Operate** (tool-calling chat with an approval dialog, autonomy policy, step/time budgets and dry run), **Tools** (all 55 tools, their JSON schemas and a form that runs any of them by hand), **Automations** (named tool calls on a manual/on-open/daily/weekly rhythm), **Providers** (15 endpoints, open-source first — Ollama, vLLM, llama.cpp, LocalAI, LM Studio, TGI, OpenRouter, Groq, Together, DeepSeek, Mistral, Fireworks, Cerebras, Novita, or any OpenAI-compatible gateway, each with a real connection probe), **Control API** (manifest, curl, enqueue and queue state), **Runs & audit** (per-run steps with arguments, exportable JSON/CSV) and **Deployment** (server spec, deploy script, `.env`, live health check). Works with no model at all: a deterministic grammar handles 20 classes of task offline. See [docs/BILL-AGENT.md](docs/BILL-AGENT.md) and [docs/OPEN-SOURCE-PROVIDERS.md](docs/OPEN-SOURCE-PROVIDERS.md) |
 
 ### Messaging & Calls
 | Module | What it does |
@@ -55,6 +61,7 @@ npm start           # production server on 0.0.0.0:3000
 | `/app/applications` | Status chips, per-application document checklist with third-party blockers, deadline risk, "where it stalls" analysis |
 | `/app/universities` | University catalogue with rankings, scholarships, per-year tuition, intakes, course requirements, tuition chart |
 | `/app/study` | Focus timer that auto-logs sessions, weekly plan, confidence tracking, skill radar |
+| `/app/exam` | **Computer-based exam room**: timed IELTS Academic, TOEFL iBT and placement papers with a section countdown, question palette, flags, autosaved drafts, live word counts and writing checks, auto-marked objective sections, 1–9 self-assessment for writing and speaking blended into the final band, CEFR mapping, per-question review with explanations, and a band-scored attempt history. Listening scripts are read aloud by the browser's speech engine |
 | `/app/tutor` | A voice-first English tutor that runs entirely on your own machine — seven CEFR levels, a local record→recognise→reason→synthesise speech pipeline, word-level highlighting with 0.8×/1.0×/1.2× playback, an offline dictionary with pronunciation, four exercise types, a 60-point pass mark, a buddy that evolves from an egg to a dragon, multi-learner profiles and certificates. The exam lab adds TOEFL/IELTS/TOEIC tracks, a masked-language cloze with a deterministic offline scorer, reflection reports and issued certificates |
 
 ### AI Marketing
@@ -113,6 +120,16 @@ npm start           # production server on 0.0.0.0:3000
 `/pricing` · `/blog` · `/blog/[slug]` · `/about` · `/contact`
 
 ---
+
+## Documentation
+
+| Document | What it covers |
+| --- | --- |
+| [docs/HANDOVER.md](docs/HANDOVER.md) | Start here: run, deploy, operate, what was verified, what was not |
+| [docs/BILL-AGENT.md](docs/BILL-AGENT.md) | The operator: tool registry contract, run loop, offline grammar, control API, safety, limits |
+| [docs/OPEN-SOURCE-PROVIDERS.md](docs/OPEN-SOURCE-PROVIDERS.md) | 15 providers, exact local setup commands, model advice, probe troubleshooting, how to add one |
+| [docs/SERVER-SPEC.md](docs/SERVER-SPEC.md) | The `panel.alolabs.net` host, deploy, environment, nginx, Cloudflare, rollback |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Framework-level deployment reference (database, media, realtime, email, backup) |
 
 ## The communication stack
 
@@ -241,11 +258,14 @@ src/
     layout.tsx          root layout, theme script, toaster, ⌘K palette
     page.tsx            marketing home
     features/ marketing-kit/ showcase/ pricing/ templates/ blog/ about/ contact/
-    app/                workspace shell + 42 module routes
+    app/                workspace shell + 44 module routes
+    api/agent/          manifest, command queue, settle (Bill Agent control API)
   components/
     ui/                 Badge, Avatar, Progress, Toggle, Meter, Modal, Toaster, Reveal
     charts/             SVG charts: area, bar, donut, radar, funnel, heatmap, sparkline
     app/                Sidebar, Topbar, CommandPalette, PageHeader
+    agent/              operator console, tool catalogue, providers, audit,
+                        automations, control API, deployment panels
     marketing/          MarketingHeader, MarketingFooter, ProductMock
     studio/             DiagramCanvas, GeneratedArt
     messaging/          ChatBubble, CallOverlay, MediaViewer, ChatKitPreviews,
@@ -253,7 +273,7 @@ src/
     research/           MolxPanel
   lib/
     types.ts            every domain entity
-    nav.ts              9 nav groups, 42 routes
+    nav.ts              10 nav groups, 45 routes
     humanizer.ts        humaniser + SEO scorer + repurpose
     webrtc.ts           call engine, stats polling, MOS estimate
     ipc.ts              promise IPC bridge + desktop handlers
@@ -263,6 +283,8 @@ src/
     tutor.ts            sentence analysis, correction, tutor reply
     callcenter.ts       redaction, sentiment, QA scoring, flow, consent
     translate.ts        offline phrase + word translator for four languages
+    agent/              Bill Agent: registry (50 tools), providers, offline
+                        planner, bounded runtime, schema validation, store, queue
     data/               seed data for every module
   store/
     useStore.ts         one persisted domain store, ~75 CRUD actions
@@ -273,10 +295,12 @@ src/
 `friendconnect-workspace-v1`. Every module reads and writes the same records, so
 moving a deal updates the dashboard, the funnel and the forecast together.
 
-**Styling** — Tailwind v4 with the "Aurora" design system: indigo brand →
-teal accent → amber signal on ink neutrals, class-based dark mode, system font
-stacks (no webfonts), and shared `fc-card` / `.btn` / `.field` / `.chip`
-primitives.
+**Styling** — Tailwind v4 with one design-token vocabulary: orange brand
+(`#F97316`) → blue accent (`#2563EB`) → red signal on slate neutrals, class-based
+dark mode, system font stacks (no webfonts), and the shared `fc-surface` /
+`fc-line` / `fc-fg` tokens behind `fc-card`, `.btn`, `.field` and `.chip`
+primitives. Every dashboard uses those primitives, so light and dark mode are
+defined once in `globals.css` rather than per page.
 
 **Offline by design** — no CDN, no webfont, no analytics, no cookies. The
 in-app preview renders the complete product with no network access.
@@ -285,6 +309,16 @@ in-app preview renders the complete product with no network access.
 
 ## Verification
 
-- `./node_modules/.bin/tsc --noEmit` — clean, strict mode
-- `npm run build` — 60/60 static pages generated
-- All 51 routes return HTTP 200 from the production server
+- `npx tsc --noEmit` — clean, strict mode
+- `npx eslint .` — 0 errors
+- `npm run build` — every route generated, including the seven Bill Agent tabs
+- `npm test` — 155 passed, 29 skipped. The 29 skips are the HTTP integration
+  suites: their gate is a `/api/health` that returns 200, which needs a database,
+  so they skip rather than fake-pass. The 84 Bill Agent and exam tests cover the
+  registry contract, argument validation, the run loop's four stop conditions,
+  every write tool against both an in-memory workspace and the real store, both
+  provider wires, the offline grammar, the exam marking tables and the exam
+  tools
+- Production server: `/app/bill-agent`, `/app`, `/app/messenger`, `/legal/*`,
+  `/api/agent/manifest` and `/api/agent/commands` all answer 200; the queue
+  accepts, lists and settles a command end to end

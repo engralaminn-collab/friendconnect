@@ -5,12 +5,13 @@
 module.exports = {
   apps: [
     {
-      name: 'friendconnect-app',
+      // Deployed as panel.alolabs.net → 127.0.0.1:3012 (see scripts/deploy-alo-server.sh)
+      name: process.env.APP_NAME || 'friendconnect',
       script: '.next/standalone/server.js',
-      cwd: '/home/aloedu/friendconnect',
+      cwd: process.env.APP_DIR || __dirname,
       env: {
         NODE_ENV: 'production',
-        PORT: 3000,
+        PORT: Number(process.env.PORT || 3012),
       },
       instances: 1, // Increase for multi-core (use cluster mode)
       autorestart: true,
@@ -26,7 +27,7 @@ module.exports = {
     {
       name: 'friendconnect-realtime',
       script: 'mini-services/realtime/index.ts',
-      cwd: '/home/aloedu/friendconnect',
+      cwd: process.env.APP_DIR || __dirname,
       interpreter: 'bun',
       env: {
         NODE_ENV: 'production',
@@ -43,7 +44,7 @@ module.exports = {
     {
       name: 'friendconnect-worker',
       script: 'mini-services/worker/index.ts',
-      cwd: '/home/aloedu/friendconnect',
+      cwd: process.env.APP_DIR || __dirname,
       interpreter: 'bun',
       env: {
         NODE_ENV: 'production',

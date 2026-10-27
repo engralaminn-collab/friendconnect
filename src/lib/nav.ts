@@ -42,6 +42,8 @@ import {
   BookMarked,
   Network,
   Wand2,
+  BrainCircuit,
+  Timer,
 } from "lucide-react";
 
 export interface NavItem {
@@ -69,6 +71,19 @@ export const navGroups: NavGroup[] = [
         icon: LayoutDashboard,
         description: "Every module, one lens",
         keywords: "home overview metrics charts",
+      },
+    ],
+  },
+  {
+    id: "operator",
+    label: "Operator",
+    items: [
+      {
+        href: "/app/bill-agent",
+        label: "Bill Agent",
+        icon: BrainCircuit,
+        description: "One AI, every module, fully audited",
+        keywords: "agent ai operator automate ollama openrouter provider tools mcp control api bill",
       },
     ],
   },
@@ -185,6 +200,14 @@ export const navGroups: NavGroup[] = [
         icon: Sparkles,
         description: "Offline voice English tutor",
         keywords: "english tutor speaking pronunciation dictionary vocabulary cefr lessons buddy",
+      },
+      {
+        href: "/app/exam",
+        label: "Exam room",
+        icon: Timer,
+        description: "Timed IELTS, TOEFL and placement papers with band scoring",
+        keywords:
+          "exam test ielts toefl cbt computer based reading listening writing speaking band score mock placement timer cefr",
       },
     ],
   },

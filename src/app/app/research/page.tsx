@@ -100,6 +100,7 @@ export default function ResearchPage() {
   const [running, setRunning] = React.useState(false);
   const [progress, setProgress] = React.useState(0);
   const [activeId, setActiveId] = React.useState<string | null>(SEED_RESULTS[0].id);
+  const [listFilter, setListFilter] = React.useState<"all" | "ok" | "blocked">("all");
   const [researchModal, setResearchModal] = React.useState(false);
   const [researchQuestion, setResearchQuestion] = React.useState("");
   const [researchSteps, setResearchSteps] = React.useState<
@@ -194,6 +195,11 @@ export default function ResearchPage() {
   };
 
   const okCount = results.filter((r) => r.status === "ok").length;
+  const visibleResults = results.filter((r) => {
+    if (listFilter === "ok") return r.status === "ok";
+    if (listFilter === "blocked") return r.status !== "ok";
+    return true;
+  });
   const avgMs = Math.round(
     results.filter((r) => r.status === "ok").reduce((a, r) => a + r.ms, 0) /
       Math.max(1, okCount),
@@ -394,18 +400,21 @@ export default function ResearchPage() {
 
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <FilterChip active onClick={() => {}}>
+            <FilterChip active={listFilter === "all"} onClick={() => setListFilter("all")}>
               All crawls ({results.length})
             </FilterChip>
-            <FilterChip active={false} onClick={() => {}}>
+            <FilterChip active={listFilter === "ok"} onClick={() => setListFilter("ok")}>
               Successful ({okCount})
             </FilterChip>
-            <FilterChip active={false} onClick={() => {}}>
+            <FilterChip
+              active={listFilter === "blocked"}
+              onClick={() => setListFilter("blocked")}
+            >
               Blocked ({results.length - okCount})
             </FilterChip>
           </div>
 
-          {results.map((r) => (
+          {visibleResults.map((r) => (
             <article
               key={r.id}
               className={cn(
@@ -504,6 +513,14 @@ export default function ResearchPage() {
               icon={<Globe className="size-6" />}
               title="Nothing crawled yet"
               description="Paste a URL on the left and crawl it."
+            />
+          )}
+
+          {results.length > 0 && visibleResults.length === 0 && (
+            <EmptyState
+              icon={<Globe className="size-6" />}
+              title={`No ${listFilter === "ok" ? "successful" : "blocked"} crawls`}
+              description="Switch the filter back to All crawls to see every result."
             />
           )}
         </div>

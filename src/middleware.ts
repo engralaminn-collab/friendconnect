@@ -7,7 +7,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 const SESSION_COOKIE = "fc_session";
-const PROTECTED_PREFIXES = ["/app"];
+/**
+ * The /app workspace is local-first: every module reads and writes browser
+ * storage and calls no authenticated API. Gating it behind an account made 42
+ * dashboards unreachable on a box without a database, so the gate now applies
+ * only to account pages. Server APIs remain session-protected on their own.
+ * Set WORKSPACE_REQUIRES_AUTH=1 to restore the gate for a shared deployment.
+ */
+const PROTECTED_PREFIXES: string[] =
+  process.env.WORKSPACE_REQUIRES_AUTH === "1" ? ["/app"] : [];
 const AUTH_PAGES = ["/login", "/register"];
 
 export function middleware(req: NextRequest) {

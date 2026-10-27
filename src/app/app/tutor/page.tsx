@@ -40,6 +40,47 @@ import { useToast } from "@/store/useUI";
 
 export default function TutorPage() {
   const toast = useToast();
+  const [audioRate, setAudioRate] = React.useState(1);
+  const [speaking, setSpeaking] = React.useState(false);
+  const [spokenText, setSpokenText] = React.useState<string | null>(null);
+
+  /**
+   * The only external service in this module: the browser's own speech
+   * engine. If the device has no English voice installed we say so rather
+   * than pretending audio played.
+   */
+  const speak = React.useCallback(
+    (text: string, rate = audioRate) => {
+      if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+        toast.warning("No speech engine", "This browser has no SpeechSynthesis support.");
+        return false;
+      }
+      const synth = window.speechSynthesis;
+      synth.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = rate;
+      utterance.pitch = 1;
+      utterance.lang = "en-GB";
+      utterance.onstart = () => {
+        setSpeaking(true);
+        setSpokenText(text);
+      };
+      utterance.onend = () => setSpeaking(false);
+      utterance.onerror = () => {
+        setSpeaking(false);
+        toast.warning("Voice unavailable", "Install an English voice pack to hear this.");
+      };
+      synth.speak(utterance);
+      return true;
+    },
+    [audioRate, toast],
+  );
+
+  React.useEffect(() => () => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+  }, []);
   const [profileId, setProfileId] = React.useState(LEARNER_PROFILES[0].id);
   const [levelId, setLevelId] = React.useState("l1");
   const [tab, setTab] = React.useState<
@@ -510,14 +551,47 @@ export default function TutorPage() {
             </div>
             <div className="mt-4 rounded-xl border border-[var(--fc-line)] bg-[var(--fc-surface-2)] p-4">
               <div className="flex items-center gap-2.5">
-                <button className="grid size-9 place-items-center rounded-full bg-[var(--color-brand-500)] text-white">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const started = speak(question.prompt);
+                    if (started) {
+                      toast.info("Playing the prompt", `${audioRate.toFixed(1)}× · ${question.audioLabel}`);
+                    }
+                  }}
+                  aria-label={speaking ? "Speaking" : "Play the prompt aloud"}
+                  className="grid size-9 place-items-center rounded-full bg-[var(--color-brand-500)] text-white transition-transform hover:scale-105"
+                >
                   <Play className="size-4 fill-white" />
                 </button>
                 <div className="min-w-0 flex-1">
                   <div className="text-[13px] font-semibold">{question.audioLabel}</div>
                   <div className="text-[11px] text-[var(--fc-fg-subtle)]">
-                    Pre-generated audio, 0.8× / 1.0× / 1.2×
+                    {speaking && spokenText === question.prompt
+                      ? "Playing through your device voice"
+                      : "Device speech · 0.8× / 1.0× / 1.2×"}
                   </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  {[0.8, 1, 1.2].map((rate) => (
+                    <button
+                      key={rate}
+                      type="button"
+                      onClick={() => {
+                        setAudioRate(rate);
+                        speak(question.prompt, rate);
+                      }}
+                      className={cn(
+                        "rounded-md px-1.5 py-1 font-mono text-[10.5px] font-semibold transition-colors",
+                        audioRate === rate
+                          ? "bg-[var(--color-brand-500)] text-white"
+                          : "bg-[var(--fc-surface-3)] text-[var(--fc-fg-subtle)] hover:text-[var(--fc-fg)]",
+                      )}
+                      aria-pressed={audioRate === rate}
+                    >
+                      {rate.toFixed(1)}×
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
@@ -1004,7 +1078,13 @@ export default function TutorPage() {
                     {w.meaning}
                   </span>
                   <span className="text-[12px] text-[var(--fc-fg-subtle)]">{w.chinese}</span>
-                  <button className="grid size-7 place-items-center rounded-lg bg-[var(--fc-surface-3)] text-[var(--fc-fg-subtle)]">
+                  <button
+                    type="button"
+                    onClick={() => speak(w.word)}
+                    aria-label={`Pronounce ${w.word}`}
+                    title={`Pronounce ${w.word}`}
+                    className="grid size-7 place-items-center rounded-lg bg-[var(--fc-surface-3)] text-[var(--fc-fg-subtle)] transition-colors hover:bg-[var(--color-brand-500)]/15 hover:text-[var(--color-brand-600)]"
+                  >
                     <Volume2 className="size-3.5" />
                   </button>
                 </li>

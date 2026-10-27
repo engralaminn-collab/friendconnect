@@ -1745,3 +1745,91 @@ Stage Summary:
 - Two bugs fixed: missing upload route + CallOverlay peer null crash.
 - ALL features now work in the sandbox: file/image/video sharing, call signaling, chat, friends, groups, stories, admin, 2FA, etc.
 - The ONLY thing that requires a real device: actual audio/video media (camera/mic access). The call SIGNLING works — on a real phone, getUserMedia would prompt for permission and the call would connect.
+
+---
+
+Task ID: 28-final-handover
+Agent: Arena Agent — final delivery pass
+
+Work Log:
+- **Extensions to the operator's reach (39 → 55 tools).** Added `create_student`
+  (dedupe on email), `create_post`, `create_event`, `log_call` (derives RTT /
+  jitter / loss from MOS), `update_gateway`, `toggle_plugin`, `pin_note`,
+  `update_wiki_page`, `save_diagram` (start/end caps, edges auto-wired),
+  `set_kid_safe`, `mark_notifications_read`, plus a new `studios` group. Every one
+  went through `WorkspacePort`, so the real store and the test workspace agree by
+  construction.
+- **Computer-based English test — the whole workflow now lives in the product.**
+  `src/lib/exam.ts` (pure engine: strict option-set matching, published IELTS raw
+  score → band tables for listening and reading, TOEFL 0–120 scaling, CEFR
+  mapping, word-count and discourse-marker feedback) + `src/lib/data/exams.ts`
+  (three original papers: full IELTS Academic, TOEFL practice set, 15-minute
+  placement) + `/app/exam` (section countdown that auto-advances, question
+  palette, flags, autosaved drafts, speech-engine playback of listening scripts,
+  live word counts, self-assessment slider for writing/speaking, per-question
+  review with explanations, attempt history with resume/delete). Nothing copied
+  from a published test; task types follow the public specs.
+- **Exam tools for Bill Agent:** `list_exam_papers`, `start_exam_attempt`,
+  `grade_exam_attempt` (marks objective answers, blends self-assessment, stores
+  band + CEFR + review), `list_exam_attempts`, `delete_exam_attempt`. So the
+  operator can sit, mark and archive a paper without a human clicking.
+- **Offline grammar extended** to the new surfaces: student, event, feed post,
+  timed call log, gateway connect/disconnect, kid-safe, notifications, diagrams,
+  wiki pages. The call rule keeps the old `log_activity` behaviour when no
+  duration is given, so earlier phrasings still work.
+- **CSS foundation (this was the real reason the dashboards looked broken).**
+  `globals.css` had no `--fc-surface` / `--fc-line` / `--fc-fg*` tokens, no
+  `.fc-card`, `.btn*`, `.field`, `.chip` or `.fc-scroll-thin`, and the
+  `brand`/`accent`/`signal`/`violet`/`ink` scales were missing from the Tailwind
+  theme — so `bg-brand-50`, `text-violet-700` and 317 `.fc-card` usages compiled
+  to nothing. All defined once, in one vocabulary, light and dark.
+- **Dead controls hunted to zero.** Two tutor buttons now drive real
+  SpeechSynthesis at 0.8/1.0/1.2×; research crawl filters actually filter; `#`
+  links replaced by `/legal/[slug]` (privacy, terms, security, status) and a real
+  GitHub link. A structural scan of every `<button>` in `src/app/app` and
+  `src/components` now reports zero without `onClick`, `type="submit"` or a
+  parent popover trigger.
+- **Access fix.** `/app` is local-first (reads/writes localStorage, calls no
+  authenticated API), so gating it behind a DB session made 43 dashboards
+  unreachable without a database. `WORKSPACE_REQUIRES_AUTH=1` restores the gate;
+  server APIs keep their own checks.
+- **Re-verified the two recurring regressions from task 27:**
+  `src/app/api/files/upload/route.ts` exists and answers 401 unauthenticated
+  (correct); `src/components/fc/calls/CallOverlay.tsx` still renders on
+  `status !== 'idle'` with `peerName`/`peerPhoto` fallbacks.
+- **Docs:** `docs/BILL-AGENT.md` (rewritten for 55 tools), new
+  `docs/OPEN-SOURCE-PROVIDERS.md` (15 providers, verbatim local setup, model
+  advice, probe troubleshooting, how to add one), new `docs/SERVER-SPEC.md`
+  (host, deploy, env, nginx, Cloudflare, rollback, troubleshooting),
+  `scripts/deploy-alo-server.sh`, `DEPLOYMENT.md` section 14, README rewritten.
+
+VERIFIED:
+- `npx tsc --noEmit` clean · `npx eslint src/lib/agent src/components/agent src/app/app/bill-agent src/app/app/exam` 0 problems
+- `npx next build` exit 0
+- `npm test` 155 passed / 29 skipped (skips = HTTP suites whose gate is a 200
+  `/api/health`, which needs a database — they skip honestly)
+- Production server on :3012 — every `/app/*` module route 200, `/app/exam` 200,
+  `/app/bill-agent` 200, `/legal/*` 200, manifest reports 55 tools / 7 groups /
+  15 providers
+- Control API round trip: POST → id, GET ?all=1 lists it, settle 200, unknown tool
+  404, DELETE 200
+
+NOT VERIFIED / LIMITS (stated, not hidden):
+- TURN/STUN cross-network calls, mobile call path, VAPID push, SMTP email, the
+  MySQL/Postgres/Redis connections — none configured in this sandbox.
+- `prisma generate` cannot reach `binaries.prisma.sh` here; the local client is a
+  stub. `next build` was validated against it, which is not the same as a real
+  client. On a networked machine the normal command works.
+- Node here is v22.22.3, not the v24.22.1 in the server spec.
+- The agent queue is server memory with a TTL, drained by an open tab; the audit
+  trail is browser-local. Both are deliberate and documented.
+- No browser was available for a visual pass: UI verification is SSR-HTML and
+  route-level, plus the compiled CSS actually containing the tokens.
+
+Stage Summary:
+- The product is complete enough to hand over: every dashboard renders with real
+  styling, every control is wired, exam work is doable end to end inside the app,
+  one Bill Agent can operate all of it over a schema-validated tool registry, and
+  the open-source provider slot stays open (offline mode needs no model at all).
+- Deployment is one command against a documented host, with the Cloudflare,
+  health-check and rollback traps written down.
